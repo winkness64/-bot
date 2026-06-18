@@ -1,0 +1,33 @@
+M2.1 Explicit Memory Handler · 2026-06-04
+Base M2 v1 SHA256: 97c562fee0317b1ab4aeeabcfbef164e9f81ad467024bd25c2e08d07be0424d4
+
+Package: dist/patches/yangyang_m2_1_explicit_memory_handler_20260604.tar.gz
+Top-level directory: yangyang_m2_1_explicit_memory_handler_20260604/
+Runtime config: NOT INCLUDED / NOT OVERWRITTEN
+
+Included files:
+- README_M2_1_EXPLICIT_MEMORY_HANDLER_20260604.md
+- MANIFEST_M2_1_EXPLICIT_MEMORY_HANDLER_20260604.txt
+- src/plugins/yangyang/__init__.py
+- src/plugins/yangyang/memory/explicit_handler.py
+- src/plugins/yangyang/memory/explicit_memory.py
+- src/plugins/yangyang/memory/store.py
+- src/plugins/yangyang/memory/__init__.py
+- tests/test_explicit_memory.py
+- tests/test_memory_phase_c.py
+- tests/test_provider.py
+
+Checks:
+- py_compile: PASS
+- pytest: 67 passed in 0.64s
+
+Payload file SHA256 (manifest excluded to avoid self-referential checksum):
+3861fd88639970c66207831df67fa14a8f74fbba02cef42bc856a216ba235f38  README_M2_1_EXPLICIT_MEMORY_HANDLER_20260604.md
+971c7170385205906b420564d1d89164c769deab15cddb0dccf1615b749ed586  src/plugins/yangyang/__init__.py
+95c8aae14ef5021a8101f98b540af34a90a614e57e68a486b7592981d34bf4c8  src/plugins/yangyang/memory/explicit_handler.py
+d9022246d645466dac3abcb0cd590a6b76566991e44354267638649caf31843c  src/plugins/yangyang/memory/explicit_memory.py
+720f6df2c9ac9de719d085014432666b51fdc3ce1a1207392cc1f0702a67e58a  src/plugins/yangyang/memory/store.py
+212e251ec2d842aaffa17d64450cfc1dd506cf6f9a4a3d6df2261175d1a16823  src/plugins/yangyang/memory/__init__.py
+5088c7a8734ad2eb2ae68dada3b4d15f0379638390a13006cbf5bbeca81d9d49  tests/test_explicit_memory.py
+d13855f6ddd3ca9df35f9896659507c272d331465e2550e297d5d3e066b4b719  tests/test_memory_phase_c.py
+2b0c516bac08dc8f0fb3aad18b1634942d9afa453de3b03a43c301c36ff4d467  tests/test_provider.py

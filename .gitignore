@@ -1,0 +1,75 @@
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python build
+build/
+site/
+*.egg-info/
+
+# Runtime / local state
+logs/
+tmp/
+data/
+dist/
+src/plugins/yangyang/logs/
+src/plugins/yangyang/output/
+src/plugins/yangyang/data/audit/
+src/plugins/yangyang/data/cache/
+src/plugins/yangyang/data/skills/
+src/plugins/yangyang/data/memory/backups/
+src/plugins/yangyang/data/chat_history.db
+src/plugins/yangyang/data/chat_history.db-*
+src/plugins/yangyang/data/chat_history.db.*
+src/plugins/yangyang/data/cooldown.db
+src/plugins/yangyang/data/*.db
+src/plugins/yangyang/data/**/*.db
+src/plugins/yangyang/data/**/*.sqlite
+src/plugins/yangyang/data/**/*.sqlite3
+src/plugins/yangyang/data/**/*.jsonl
+
+# Backups / archives / dumps
+backups/
+src/backups/
+_archived_disabled_components/
+yangyang_nonebot_mvp/
+yangyang_phase6a_decision_trace_loguru_fix_20260528-211609/
+秧秧冷备份/
+src/plugins/yangyang.backup-*/
+*.bak
+*.before
+*.backup-*
+*.tar.gz
+*.zip
+*.sha256
+
+# Keep selected source docs under knowledge
+!src/plugins/yangyang/data/knowledge/
+!src/plugins/yangyang/data/knowledge/**
+
+# Ad-hoc backup suffixes inside source/tests
+*.py.bak_*
+*.json.before
+*.py.before_*
+*backup-*
+*.bak_*
+src/plugins/yangyang/core/isaac_agent/memory.jsonl

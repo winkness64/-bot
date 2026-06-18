@@ -1,0 +1,206 @@
+{
+  "bundle_name": "i_line_mvp_stable_20260607",
+  "capabilities": {
+    "ambiguous_clarification": true,
+    "english_isaac_triggers": false,
+    "group_trigger_exposure": false,
+    "high_risk_blocked": true,
+    "natural_language_delegation": [
+      "health_report",
+      "workspace_report",
+      "dry_run_plan",
+      "help_report"
+    ],
+    "owner_private_only": true,
+    "p2_real_provider_implementation": "NO_GO",
+    "provider_bridge_default_off": true,
+    "triggers": [
+      "I叔",
+      "i叔",
+      "艾萨克"
+    ]
+  },
+  "excluded": [
+    "P2 real provider implementation",
+    "IsaacExecutor/runtime daemon/service unit implementation",
+    "runtime_config.json/.env/long_term/memories.jsonl data files",
+    "host apply/restart scripts"
+  ],
+  "generated_date": "2026-06-07",
+  "host_smoke_runbook": "docs/i_line/I_LINE_MVP_STABLE_HOST_SMOKE_RUNBOOK_20260607.md",
+  "included_files": [
+    {
+      "path": "docs/i_line/I_LINE_MVP_STABLE_BUNDLE_20260607.md",
+      "sha256": "ddf57a01e185697e7aee3994b88ce555e0556ef8f3495198662c2168e121ba49",
+      "size": 4067
+    },
+    {
+      "path": "docs/i_line/I_LINE_MVP_STABLE_HOST_SMOKE_RUNBOOK_20260607.md",
+      "sha256": "e949b3c50fb4bcb0e08535500f36a11f922ade26367028fdb89452e2c76a0c61",
+      "size": 7095
+    },
+    {
+      "path": "src/plugins/yangyang/__init__.py",
+      "sha256": "fadf36d96d035e1d8cb082edcbc0d309adf02d9331933d73b41321cc94a04766",
+      "size": 33025
+    },
+    {
+      "path": "src/plugins/yangyang/core/isaac_agent_bus_p0.py",
+      "sha256": "471d6b8d18e9894efb5d5f40d1a869d303628e539e47845dfd31944903c17d30",
+      "size": 27130
+    },
+    {
+      "path": "src/plugins/yangyang/core/isaac_intent_p1.py",
+      "sha256": "a1ec3d9271b3a55dae296b6f8338c680d451bbddd76510bd1a718c7e28459335",
+      "size": 22336
+    },
+    {
+      "path": "src/plugins/yangyang/core/isaac_intent_provider_bridge_p15.py",
+      "sha256": "527c4956154a4f505346e701c7a75931c5709fb21014729b5d9d5d92a8d46ed6",
+      "size": 13429
+    },
+    {
+      "path": "tests/fixtures/i_line_p1_4_natural_delegation_matrix.jsonl",
+      "sha256": "6170c7d6f08876035409a5cf6d28c4493645a4c8a61234a8873bc1215c5ef161",
+      "size": 5339
+    },
+    {
+      "path": "tests/mock_pipeline_test.py",
+      "sha256": "d7e4a8087ff164a54964fbb901d83d682b969a8a795d6015f23a02cf987c011d",
+      "size": 79047
+    },
+    {
+      "path": "tests/test_i_line_p0_2_help_command.py",
+      "sha256": "68bf7e45096a293fe76fe7e09c666118582341d9ec55077be8a0751ff5247e37",
+      "size": 2071
+    },
+    {
+      "path": "tests/test_i_line_p0_3_trigger_contract.py",
+      "sha256": "20dee1884af58bfc000af9d722584b55eef5d4b7d965c5eff874e1fa5b2517aa",
+      "size": 2260
+    },
+    {
+      "path": "tests/test_i_line_p0_isaac_agent_bus_mvp.py",
+      "sha256": "07ca4ee5cc948d8282c87f8a7e1d92280a8850a583b989a99f3c2d1cd52482c2",
+      "size": 5840
+    },
+    {
+      "path": "tests/test_i_line_p0_log_format.py",
+      "sha256": "36e537cc7973e3d9ddc6c9df7389840277b339a4392f0bb51b7420713a2e49dd",
+      "size": 447
+    },
+    {
+      "path": "tests/test_i_line_p0_plugin_smoke.py",
+      "sha256": "ff11c3b8340c13a817449d547c3fe73ab483f2263278802fdc82b085eb5648b6",
+      "size": 5898
+    },
+    {
+      "path": "tests/test_i_line_p1_1_intent_preview_handler.py",
+      "sha256": "876939803c0e5b60f50bc57238adf3112f6d96110de0150075ce8353a28bea54",
+      "size": 6051
+    },
+    {
+      "path": "tests/test_i_line_p1_2_intent_provider_contract.py",
+      "sha256": "6437e2b633dc613af8869eee06ce9174f54a7bafbd5f89e2df758714d48deba6",
+      "size": 8068
+    },
+    {
+      "path": "tests/test_i_line_p1_3_natural_delegation_fixture_replay.py",
+      "sha256": "b6a17e1fac28e38fd764a2f043e139be08df5db21c4e8abd1e3ccbcebe267f94",
+      "size": 8939
+    },
+    {
+      "path": "tests/test_i_line_p1_4_fixture_matrix.py",
+      "sha256": "ac7991f27df6eb6a3257e1f346d719e0af59fa4b58fa1c3ce6c3407e477ee97c",
+      "size": 7927
+    },
+    {
+      "path": "tests/test_i_line_p1_4_natural_delegation_alias_expansion.py",
+      "sha256": "4f9b86d4f1ff97fd70ee4402f6833677b554e522f16889634f66bab0b7f0b57f",
+      "size": 9171
+    },
+    {
+      "path": "tests/test_i_line_p1_5_default_off_intent_provider_bridge.py",
+      "sha256": "08f6230b1ca599438e9e77ca0ed9a457554e16a5f78ebe9196160f76178279c5",
+      "size": 20694
+    },
+    {
+      "path": "tests/test_i_line_p1_intent_parser_dry_run.py",
+      "sha256": "84893665cc3a3625a2e3a1757154138f15ea12702b9048562eb9f8b2c1d78dcd",
+      "size": 2035
+    },
+    {
+      "path": "tools/agent_bus/agent_bus_a1_schema.py",
+      "sha256": "50d4606e41478c094e7c339a6672b1cbe47e6a6321f6205a68bb669a406d88bc",
+      "size": 27900
+    }
+  ],
+  "protected_workspace_sha_snapshot_current": [
+    {
+      "path": ".env",
+      "sha256": null,
+      "size": null,
+      "status": "missing"
+    },
+    {
+      "path": "src/plugins/yangyang/data/cache/memories/long_term/impressions.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "status": "present"
+    },
+    {
+      "path": "src/plugins/yangyang/data/cache/memories/long_term/relations.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "status": "present"
+    },
+    {
+      "path": "src/plugins/yangyang/data/mem-root/long_term/impressions.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "status": "present"
+    },
+    {
+      "path": "src/plugins/yangyang/data/mem-root/long_term/relations.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "status": "present"
+    },
+    {
+      "path": "src/plugins/yangyang/data/memory/long_term/impressions.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "status": "present"
+    },
+    {
+      "path": "src/plugins/yangyang/data/memory/long_term/relations.json",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+      "size": 2,
+      "status": "present"
+    },
+    {
+      "path": "src/plugins/yangyang/data/runtime_config.json",
+      "sha256": "25ab51f58f64678b0649d327f270df4ce7913a9e242d2e16a4739f2cda2dfe39",
+      "size": 3298,
+      "status": "present"
+    }
+  ],
+  "py_compile_targets": [
+    "src/plugins/yangyang/__init__.py",
+    "src/plugins/yangyang/core/isaac_agent_bus_p0.py",
+    "src/plugins/yangyang/core/isaac_intent_p1.py",
+    "src/plugins/yangyang/core/isaac_intent_provider_bridge_p15.py",
+    "tools/agent_bus/agent_bus_a1_schema.py"
+  ],
+  "safety_invariants": {
+    "no_isaac_executor": true,
+    "no_real_provider_network": true,
+    "no_real_task_request_dispatch_for_p1_preview": true,
+    "no_runtime_config_env_long_term_files_in_bundle": true,
+    "no_send_message_to_user": true,
+    "no_shell_systemctl_subprocess_os_system": true
+  },
+  "scope": "I_LINE owner-private read-only health/workspace/dry-run/help MVP; P2 implementation excluded and NO-GO",
+  "status": "STABLE_FOR_HOST_SMOKE",
+  "test_command": "python3 -m pytest -q tests/test_i_line_*.py"
+}

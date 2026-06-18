@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "yangyang-nonebot-mvp"
+version = "0.1.0"
+description = "Yangyang NoneBot new-core MVP plugin scaffold"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+nonebot = [
+  "nonebot2>=2.3.0",
+  "nonebot-adapter-onebot>=2.4.0",
+  "openai>=1.30.0",
+  "python-dotenv>=1.0.0",
+]
+
+dev = []
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

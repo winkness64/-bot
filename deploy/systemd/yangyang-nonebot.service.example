@@ -1,0 +1,18 @@
+[Unit]
+Description=Yangyang NoneBot MVP Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust User/Group to your dedicated runtime account as needed.
+User=yangyang
+Group=yangyang
+WorkingDirectory=/opt/yangyang_nonebot_mvp
+EnvironmentFile=/opt/yangyang_nonebot_mvp/.env
+ExecStart=/opt/yangyang_nonebot_mvp/.venv/bin/python /opt/yangyang_nonebot_mvp/bot.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
