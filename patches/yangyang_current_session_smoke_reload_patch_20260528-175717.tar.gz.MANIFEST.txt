@@ -1,5 +1,0 @@
-src/plugins/yangyang/__init__.py
-tests/test_current_session_runtime_reload_patch.py
-docs/current_session_smoke_example.md
-PROJECT_PROGRESS.md
-PATCH_NOTES_current_session_smoke_reload.md

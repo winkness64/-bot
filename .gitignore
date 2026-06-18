@@ -73,3 +73,7 @@ src/plugins/yangyang.backup-*/
 *backup-*
 *.bak_*
 src/plugins/yangyang/core/isaac_agent/memory.jsonl
+
+# Backup manifest sidecars
+*.tar.gz.MANIFEST.txt
+*.zip.MANIFEST.txt
