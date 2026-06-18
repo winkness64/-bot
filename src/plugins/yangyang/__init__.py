@@ -437,8 +437,11 @@ def register_internal_model_switch_api() -> None:
         async def _event_stream():
             queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
             finished = asyncio.Event()
+            client_disconnected = False
 
             async def _on_stream_delta(delta_text, meta):
+                if finished.is_set():
+                    return
                 delta = str(delta_text or '')
                 if not delta:
                     return
@@ -464,6 +467,8 @@ def register_internal_model_switch_api() -> None:
                         allow_streaming=True,
                         stream_callback=_on_stream_delta,
                     )
+                    if finished.is_set():
+                        return
                     await queue.put((
                         'agent_stats',
                         {
@@ -487,18 +492,22 @@ def register_internal_model_switch_api() -> None:
                             'actual_tier': actual_tier,
                         },
                     ))
+                except asyncio.CancelledError:
+                    logger.info('yangyang plugin: internal sse stream cancelled session_id=%s', session_id)
+                    raise
                 except Exception as exc:
                     logger.exception('yangyang plugin: internal sse stream failed session_id=%s', session_id)
-                    await queue.put((
-                        'error',
-                        {
-                            'ok': False,
-                            'session_id': session_id,
-                            'error': str(getattr(router, 'last_call_error_type', '') or 'stream_call_failed'),
-                            'detail': str(exc),
-                            'request_id': str(getattr(router, 'last_call_request_id', '') or ''),
-                        },
-                    ))
+                    if not finished.is_set():
+                        await queue.put((
+                            'error',
+                            {
+                                'ok': False,
+                                'session_id': session_id,
+                                'error': str(getattr(router, 'last_call_error_type', '') or 'stream_call_failed'),
+                                'detail': str(exc),
+                                'request_id': str(getattr(router, 'last_call_request_id', '') or ''),
+                            },
+                        ))
                 finally:
                     finished.set()
 
@@ -513,6 +522,10 @@ def register_internal_model_switch_api() -> None:
             task = asyncio.create_task(_run_model_call())
             try:
                 while True:
+                    if await request.is_disconnected():
+                        client_disconnected = True
+                        logger.info('yangyang plugin: internal sse client disconnected session_id=%s', session_id)
+                        break
                     if finished.is_set() and queue.empty():
                         break
                     try:
@@ -521,12 +534,14 @@ def register_internal_model_switch_api() -> None:
                         continue
                     yield _yy_sse_encode(event_name, event_payload)
             finally:
+                finished.set()
                 if not task.done():
                     task.cancel()
                     try:
                         await task
                     except asyncio.CancelledError:
                         pass
+            if not client_disconnected:
                 yield _yy_sse_encode('proxy_closed', {'session_id': session_id})
 
         return StreamingResponse(
