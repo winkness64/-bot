@@ -91,7 +91,7 @@ class Router:
 
 
 def test_llm_result_formatter_takes_over_success_reply(tmp_path: Path) -> None:
-    router = Router(formatter_reply="阿漂，算好了，是 4。")
+    router = Router(formatter_reply="漂♂总，算好了，是 4。")
     r = _run(
         handle_nl(
             _msg("用 python 算一下 1+3"),
@@ -101,13 +101,13 @@ def test_llm_result_formatter_takes_over_success_reply(tmp_path: Path) -> None:
         )
     )
     assert r.handled is True and r.allowed is True
-    assert r.reply == "阿漂，算好了，是 4。"
+    assert r.reply == "漂♂总，算好了，是 4。"
     assert any(c["session_id"] == "owner_toolbox_result_formatter" for c in router.calls)
     _assert_clean(r.reply)
 
 
 def test_llm_result_formatter_rejects_fact_drift_for_python(tmp_path: Path) -> None:
-    router = Router(formatter_reply="阿漂，算好了，是 5。")
+    router = Router(formatter_reply="漂♂总，算好了，是 5。")
     r = _run(
         handle_nl(
             _msg("用 python 算一下 1+3"),

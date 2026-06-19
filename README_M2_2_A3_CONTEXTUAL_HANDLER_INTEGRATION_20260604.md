@@ -25,7 +25,7 @@
    - 创建内存态 pending。
    - pending payload 使用 resolver 生成的 payload，不再使用原命令文本。
    - pending 保存 `resolver`、`used_msg_ids`、`context_range`、`resolution_reason`。
-   - 回复 `阿漂，是要记录为：“{payload}” 吗？`
+   - 回复 `漂♂总，是要记录为：“{payload}” 吗？`
    - action=`pending_context_confirmation`。
 5. 用户确认 contextual pending 后：
    - 写入 explicit memory。

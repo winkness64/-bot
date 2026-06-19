@@ -76,6 +76,8 @@ from .core.owner_toolbox.progress import (
 )
 from .core.owner_rules import normalize_uid_list
 from .core.prompt_builder import PromptBuilder
+from .core.private_context_session_state import PrivateContextSessionState, PrivateContextSessionStateStore
+from .core.owner_private_confirmed_facts import extract_confirmed_facts_from_owner_private_text
 from .core.runtime_compat import escape_log_preview, resolve_memory_root, resolve_plugin_init_config
 from .memory.skill_loader import SkillLoader
 from .memory.store import MemoryStore
@@ -166,6 +168,483 @@ def _collect_memory_observation(msg, decision, *, captured: bool, session_id: st
     }
 
 
+def _is_owner_private_message(msg) -> bool:
+    return str(getattr(msg, "channel", "") or "").strip().lower() == "private" and bool(getattr(msg, "is_owner", False))
+
+
+def _trim_session_state_text(value: Any, limit: int = 120) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", " ", text)
+    if len(text) <= limit:
+        return text
+    return text[: max(limit - 1, 0)].rstrip() + "…"
+
+
+_LOW_SIGNAL_SESSION_TEXTS = {
+    "继续", "继续。", "继续？", "继续!", "继续！", "好的继续", "继续出补丁", "继续出文件级补丁", "继续接写回",
+    "好的", "好", "好的你做", "你继续", "继续吧", "行", "可以", "收到", "是的", "对",
+}
+_HIGH_SIGNAL_SESSION_KEYWORDS = (
+    "加固", "修", "修补", "补丁", "记忆层", "主线", "工单", "文档", "架构", "方案", "脚本", "测试", "smoke",
+    "巡检", "关掉", "关闭", "停用", "收口", "推进", "继续做", "下一步", "现在", "今天", "昨天我们",
+)
+_COMPLETION_HINT_KEYWORDS = (
+    "已完成", "完成了", "做完了", "搞定了", "收口了", "处理完了", "结束了", "关掉了", "停了", "不用了", "先别", "别做了",
+)
+_CANCEL_HINT_KEYWORDS = (
+    "不用了", "先别", "别做了", "关掉了", "关闭了", "停了", "停用", "取消", "作废",
+)
+_RESUME_HINT_KEYWORDS = (
+    "捡回来", "继续做", "继续搞", "恢复", "接着做", "接着搞",
+)
+
+_DEFER_HINT_KEYWORDS = (
+    "先放着", "等下", "稍后", "晚点", "回头", "后面再说", "以后再说", "先不做", "先缓缓",
+)
+_OPEN_LOOP_NOISE_PREFIXES = ("漂♂总要求：", "本轮已回复：", "使用链路：")
+
+
+def _has_high_signal_session_intent(text: str) -> bool:
+    normalized = _trim_session_state_text(text, 160)
+    if not normalized:
+        return False
+    return any(keyword in normalized for keyword in _HIGH_SIGNAL_SESSION_KEYWORDS)
+
+
+def _is_low_signal_session_text(text: str) -> bool:
+    normalized = _trim_session_state_text(text, 160)
+    if not normalized:
+        return True
+    if normalized in _LOW_SIGNAL_SESSION_TEXTS:
+        return True
+    if _has_high_signal_session_intent(normalized):
+        return False
+    prefixes = ("是的", "对，", "对,", "嗯", "昨天", "昨天我们", "我们昨天")
+    if len(normalized) <= 40 and normalized.startswith(prefixes):
+        return True
+    return False
+
+
+def _normalize_open_loop_text(value: Any) -> str:
+    text = _trim_session_state_text(value, 120)
+    if not text:
+        return ""
+    for prefix in _OPEN_LOOP_NOISE_PREFIXES:
+        if text.startswith(prefix):
+            text = text[len(prefix):].strip()
+            break
+    text = re.sub(r"^[\-•\d\s\.、]+", "", text).strip()
+    return _trim_session_state_text(text, 120)
+
+
+def _looks_like_completed_or_cancelled(text: str, user_text: str) -> bool:
+    normalized = _normalize_open_loop_text(text)
+    user_normalized = _trim_session_state_text(user_text, 160)
+    if not normalized:
+        return True
+    if any(keyword in normalized for keyword in _COMPLETION_HINT_KEYWORDS):
+        return True
+    if user_normalized and normalized == user_normalized and any(keyword in user_normalized for keyword in _COMPLETION_HINT_KEYWORDS):
+        return True
+    return False
+
+
+def _build_focus_hint(current_task: str, previous: PrivateContextSessionState | None = None) -> str:
+    task = _trim_session_state_text(current_task, 160)
+    if task:
+        return task
+    return _trim_session_state_text(getattr(previous, "focus_hint", "") or getattr(previous, "current_task", ""), 160)
+
+
+def _resolve_control_target_text(user_text: str, previous: PrivateContextSessionState | None = None) -> str:
+    normalized = _trim_session_state_text(user_text, 160)
+    if not normalized:
+        return ""
+    previous_task = _normalize_open_loop_text(getattr(previous, "current_task", ""))
+    pronoun_markers = ("这个", "这事", "这个事", "这块", "这个活", "这个任务", "它", "那个", "刚才那个", "刚才放着的", "放着的那个")
+    if "文档那个" in normalized:
+        suspended_items = list(getattr(previous, "open_loops", []) or [])
+        for item in suspended_items:
+            raw = _normalize_open_loop_text(item)
+            if raw.startswith("suspended:"):
+                raw = raw.split(":", 1)[1]
+            if "文档" in raw:
+                return raw
+        if previous_task and "文档" in previous_task:
+            return previous_task
+    if any(marker in normalized for marker in pronoun_markers):
+        suspended_items = list(getattr(previous, "open_loops", []) or [])
+        for item in suspended_items:
+            raw = _normalize_open_loop_text(item)
+            if raw.startswith("suspended:"):
+                return raw.split(":", 1)[1]
+        return previous_task
+    return ""
+
+
+def _matches_control_target(candidate: str, target: str) -> bool:
+    normalized_candidate = _normalize_open_loop_text(candidate)
+    normalized_target = _normalize_open_loop_text(target)
+    if not normalized_candidate or not normalized_target:
+        return False
+    return normalized_candidate in normalized_target or normalized_target in normalized_candidate
+
+
+def _build_open_loops(previous: PrivateContextSessionState | None, current_task: str, user_text: str) -> list[str]:
+    reason = _classify_session_turn_reason(user_text)
+    control_target = _resolve_control_target_text(user_text, previous)
+    items: list[str] = []
+    for item in list(getattr(previous, "open_loops", []) or []):
+        normalized = _normalize_open_loop_text(item)
+        if not normalized or _looks_like_completed_or_cancelled(normalized, user_text):
+            continue
+        if reason in {"completion_turn", "cancel_turn"} and _matches_control_target(normalized, control_target):
+            continue
+        if normalized not in items:
+            items.append(normalized)
+    if reason == "defer_turn" and control_target:
+        suspended_target = f"suspended:{control_target}"
+        items = [item for item in items if not _matches_control_target(item, control_target)]
+        if suspended_target not in items:
+            items.insert(0, suspended_target)
+    if reason == "resume_turn" and control_target:
+        items = [item for item in items if not _matches_control_target(item, control_target)]
+        items.insert(0, control_target)
+        return items[:6]
+    if reason in {"completion_turn", "cancel_turn", "defer_turn", "ack_or_continue"}:
+        return items[:6]
+    for raw in (current_task, user_text):
+        normalized = _normalize_open_loop_text(raw)
+        if not normalized or _is_low_signal_session_text(normalized):
+            continue
+        if _looks_like_completed_or_cancelled(normalized, user_text):
+            continue
+        if normalized not in items:
+            items.insert(0, normalized)
+    return items[:6]
+
+
+def _classify_session_turn_reason(user_text: str) -> str:
+    normalized = _trim_session_state_text(user_text, 160)
+    if not normalized:
+        return "empty_input"
+    if any(keyword in normalized for keyword in _DEFER_HINT_KEYWORDS):
+        return "defer_turn"
+    if any(keyword in normalized for keyword in _RESUME_HINT_KEYWORDS):
+        return "resume_turn"
+    if "继续" in normalized and any(marker in normalized for marker in ("那个", "刚才", "文档那个", "放着的")):
+        return "resume_turn"
+    if any(keyword in normalized for keyword in _CANCEL_HINT_KEYWORDS):
+        return "cancel_turn"
+    if any(keyword in normalized for keyword in _COMPLETION_HINT_KEYWORDS):
+        return "completion_turn"
+    if _is_low_signal_session_text(normalized):
+        return "ack_or_continue"
+    return "general_turn"
+
+
+def _extract_reason_tag(memory_decision_hint: str) -> str:
+    for part in str(memory_decision_hint or "").split("|"):
+        normalized = str(part).strip()
+        if normalized.startswith("reason:"):
+            return normalized.split(":", 1)[1].strip() or "unknown"
+    return "unknown"
+
+
+def _build_memory_decision_hint(user_text: str, current_task: str, confirmed_facts: list[str], last_tool_summary: str) -> str:
+    normalized = _trim_session_state_text(user_text, 160)
+    tags: list[str] = []
+    task = _trim_session_state_text(current_task, 80)
+    fact_count = min(len(confirmed_facts or []), 6)
+    reason = _classify_session_turn_reason(normalized)
+    if not normalized:
+        tags.extend(["store:skip", "recall:skip", f"reason:{reason}", "signal:none"])
+        return " | ".join(tags)
+    if reason == "ack_or_continue":
+        tags.extend(["store:skip", "recall:keep", f"reason:{reason}", "signal:low"])
+        if task:
+            tags.append("anchor:task")
+        return " | ".join(tags)
+    tags.extend(["signal:high"])
+    if reason in {"completion_turn", "cancel_turn", "defer_turn", "resume_turn"}:
+        tags.extend(["store:task_control", "recall:task_anchor", f"reason:{reason}"])
+        if task:
+            tags.append("anchor:task")
+        return " | ".join(tags)
+    if fact_count:
+        tags.extend(["store:prefer_fact", "recall:task_anchor", "reason:confirmed_fact_hit", f"facts:{fact_count}"])
+        if task:
+            tags.append("anchor:task")
+        return " | ".join(tags)
+    if last_tool_summary:
+        tags.extend(["store:task_progress", "recall:task_anchor", "reason:toolbacked_turn", "source:tool"])
+        if task:
+            tags.append("anchor:task")
+        return " | ".join(tags)
+    if task:
+        tags.extend(["store:task_progress", "recall:task_anchor", "reason:active_task", "anchor:task"])
+        return " | ".join(tags)
+    tags.extend(["store:maybe", "recall:light", f"reason:{reason}"])
+    return " | ".join(tags)
+
+
+def _pick_session_current_task(user_text: str, previous: PrivateContextSessionState | None = None) -> str:
+    text = _trim_session_state_text(user_text, 160)
+    prev = _trim_session_state_text(getattr(previous, "current_task", ""), 160)
+    if not text:
+        return prev
+    reason = _classify_session_turn_reason(text)
+    if reason in {"ack_or_continue", "completion_turn", "cancel_turn", "defer_turn"}:
+        return prev or text
+    if reason == "resume_turn":
+        control_target = _resolve_control_target_text(text, previous)
+        return control_target or prev or text
+    if text in {"1", "2", "3", "第一个", "第二个", "第三个"}:
+        return prev or text
+    return text
+
+
+def _extract_todo_items_from_task(task_text: str, previous: PrivateContextSessionState | None = None, user_text: str = "") -> list[str]:
+    prev_items = list(getattr(previous, "todo_items", []) or [])
+    task = _trim_session_state_text(task_text, 120)
+    user_normalized = _trim_session_state_text(user_text, 160)
+    normalized_task = _normalize_open_loop_text(task)
+    reason = _classify_session_turn_reason(user_normalized or task)
+    control_target = _resolve_control_target_text(user_normalized or task, previous)
+    completion_turn = reason == "completion_turn"
+    items: list[str] = []
+    for item in prev_items:
+        normalized = _normalize_open_loop_text(item)
+        if not normalized or _looks_like_completed_or_cancelled(normalized, user_normalized):
+            continue
+        if completion_turn and normalized_task and (normalized in normalized_task or normalized_task in normalized):
+            continue
+        if reason in {"completion_turn", "cancel_turn", "defer_turn"} and _matches_control_target(normalized, control_target):
+            continue
+        if reason == "resume_turn" and _matches_control_target(normalized, control_target):
+            continue
+        if normalized not in items:
+            items.append(normalized)
+        if len(items) >= 6:
+            break
+    if not task:
+        return items[:6]
+    if reason == "resume_turn" and control_target:
+        if control_target in items:
+            items.remove(control_target)
+        items.insert(0, control_target)
+        return items[:6]
+    if reason in {"ack_or_continue", "completion_turn", "cancel_turn", "defer_turn"}:
+        return items[:6]
+    if normalized_task and not _looks_like_completed_or_cancelled(normalized_task, user_normalized):
+        if normalized_task in items:
+            items.remove(normalized_task)
+        items.insert(0, normalized_task)
+    return items[:6]
+
+
+def _build_recent_decisions(previous: PrivateContextSessionState | None, user_text: str, response_text: str, actual_tier: str) -> list[str]:
+    items: list[str] = []
+    for item in list(getattr(previous, "recent_decisions", []) or []):
+        normalized = _trim_session_state_text(item, 120)
+        if normalized and normalized not in items:
+            items.append(normalized)
+    user_summary = _trim_session_state_text(user_text, 80)
+    turn_reason = _classify_session_turn_reason(user_summary)
+    keep_low_signal_decision = turn_reason in {"ack_or_continue", "resume_turn"} and bool(getattr(previous, "current_task", ""))
+    if user_summary and (not _is_low_signal_session_text(user_summary) or keep_low_signal_decision):
+        items.append(f"漂♂总要求：{user_summary}")
+    response_summary = _trim_session_state_text(response_text, 80)
+    if response_summary and len(response_summary) >= 8:
+        items.append(f"本轮已回复：{response_summary}")
+    tier_summary = _trim_session_state_text(actual_tier, 48)
+    if tier_summary and not items:
+        items.append(f"使用链路：{tier_summary}")
+    deduped: list[str] = []
+    for item in items:
+        if item and item not in deduped:
+            deduped.append(item)
+    return deduped[-6:]
+
+
+def _build_rolling_summary(previous: PrivateContextSessionState | None, user_text: str, response_text: str, actual_tier: str, last_tool_summary: str, current_task: str, confirmed_facts: list[str], *, enabled: bool = False, char_budget: int = 500, update_min_turns: int = 2) -> str:
+    prev_summary = _trim_session_state_text(getattr(previous, "rolling_summary", ""), char_budget)
+    prev_turn_count = int(getattr(previous, "turn_count", 0) or 0)
+    next_turn_count = prev_turn_count + 1
+    if not enabled:
+        return prev_summary
+    if next_turn_count < max(1, int(update_min_turns or 1)):
+        return prev_summary
+    user_summary = _trim_session_state_text(user_text, 80)
+    response_summary = _trim_session_state_text(response_text, 120)
+    low_signal_turn = (not user_summary) or _is_low_signal_session_text(user_summary)
+    if low_signal_turn and not last_tool_summary and not confirmed_facts:
+        return prev_summary
+    fragments: list[str] = []
+    task_summary = _trim_session_state_text(current_task or getattr(previous, "current_task", ""), 120)
+    if task_summary:
+        fragments.append(f"当前任务={task_summary}")
+    if user_summary and not _is_low_signal_session_text(user_summary):
+        fragments.append(f"最近指令={user_summary}")
+    if response_summary and len(response_summary) >= 12:
+        fragments.append(f"最近回复={response_summary}")
+    if confirmed_facts:
+        fragments.append(f"确认事实数={min(len(confirmed_facts), 6)}")
+    if last_tool_summary:
+        fragments.append(f"工具结论={_trim_session_state_text(last_tool_summary, 160)}")
+    tier_summary = _trim_session_state_text(actual_tier, 48)
+    if tier_summary and fragments:
+        fragments.append(f"链路={tier_summary}")
+    merged = "；".join([part for part in fragments if part])
+    if not merged:
+        return prev_summary
+    if prev_summary:
+        merged = _trim_session_state_text(prev_summary + "；" + merged, char_budget)
+    else:
+        merged = _trim_session_state_text(merged, char_budget)
+    return merged
+
+
+def _build_session_state_diff_summary(previous: PrivateContextSessionState | None, *, current_task: str, todo_items: list[str], recent_decisions: list[str], focus_hint: str, open_loops: list[str], memory_decision_hint: str, rolling_summary: str, confirmed_facts: list[str], last_tool_summary: str) -> str:
+    changes: list[str] = []
+    prev_task = _trim_session_state_text(getattr(previous, "current_task", ""), 120)
+    now_task = _trim_session_state_text(current_task, 120)
+    if now_task and now_task != prev_task:
+        changes.append("current_task")
+    prev_todo = list(getattr(previous, "todo_items", []) or [])
+    if list(todo_items or []) != prev_todo:
+        changes.append("todo_items")
+    prev_decisions = list(getattr(previous, "recent_decisions", []) or [])
+    if list(recent_decisions or []) != prev_decisions:
+        changes.append("recent_decisions")
+    prev_focus = _trim_session_state_text(getattr(previous, "focus_hint", ""), 160)
+    if _trim_session_state_text(focus_hint, 160) != prev_focus:
+        changes.append("focus_hint")
+    prev_loops = list(getattr(previous, "open_loops", []) or [])
+    if list(open_loops or []) != prev_loops:
+        changes.append("open_loops")
+    prev_memory = _trim_session_state_text(getattr(previous, "memory_decision_hint", ""), 240)
+    if _trim_session_state_text(memory_decision_hint, 240) != prev_memory:
+        changes.append("memory_decision_hint")
+    prev_summary = _trim_session_state_text(getattr(previous, "rolling_summary", ""), 500)
+    if _trim_session_state_text(rolling_summary, 500) != prev_summary:
+        changes.append("rolling_summary")
+    prev_facts = list(getattr(previous, "confirmed_facts", []) or [])
+    if list(confirmed_facts or []) != prev_facts:
+        changes.append("confirmed_facts")
+    prev_tool = _trim_session_state_text(getattr(previous, "last_tool_summary", ""), 240)
+    if _trim_session_state_text(last_tool_summary, 240) != prev_tool:
+        changes.append("last_tool_summary")
+    reason = _extract_reason_tag(memory_decision_hint)
+    todo_delta = len(list(todo_items or [])) - len(prev_todo)
+    loop_delta = len(list(open_loops or [])) - len(prev_loops)
+    suspended_count = sum(1 for item in list(open_loops or []) if str(item).startswith("suspended:"))
+    resumed_count = 1 if reason == "resume_turn" else 0
+    changed_text = "changed=none" if not changes else "changed=" + ",".join(changes[:8])
+    return _trim_session_state_text(
+        f"{changed_text}; reason={reason}; todo_delta={todo_delta}; loop_delta={loop_delta}; suspended={suspended_count}; resumed={resumed_count}",
+        240,
+    )
+
+
+def _build_last_tool_summary(owner_tool_trace: Any, actual_tier: str) -> str:
+    trace = list(owner_tool_trace or [])
+    if trace:
+        names: list[str] = []
+        last_result_summary = ""
+        for item in trace:
+            if not isinstance(item, dict):
+                continue
+            name = _trim_session_state_text(item.get("tool_name"), 32)
+            if name:
+                names.append(name)
+        last = trace[-1] if isinstance(trace[-1], dict) else {}
+        result_payload = last.get("result")
+        result_content = ""
+        if isinstance(result_payload, dict):
+            result_content = str(result_payload.get("content") or result_payload.get("output") or result_payload.get("reply") or "")
+        else:
+            result_content = str(result_payload or last.get("content") or last.get("output") or "")
+        if result_content:
+            try:
+                result_summary = summarize_tool_result(result_content)
+                last_result_summary = _trim_session_state_text(json.dumps(result_summary, ensure_ascii=False, sort_keys=True), 160)
+            except Exception:
+                last_result_summary = _trim_session_state_text(result_content, 160)
+        names_text = ",".join([name for name in names if name][:4])
+        base = f"tools={names_text or '-'} calls={len(trace)}"
+        if last_result_summary:
+            return _trim_session_state_text(f"{base} last={last_result_summary}", 240)
+        return _trim_session_state_text(base, 240)
+    tier = _trim_session_state_text(actual_tier, 48)
+    if tier:
+        return f"direct_reply tier={tier}"
+    return ""
+
+
+def _update_owner_private_session_state(builder: Any, msg: Any, session_id: str, *, response_text: str, actual_tier: str, owner_tool_trace: Any = None) -> None:
+    if not _is_owner_private_message(msg):
+        return
+    session_store = getattr(builder, "session_state_store", None)
+    if session_store is None or not hasattr(session_store, "get_or_create") or not hasattr(session_store, "update"):
+        return
+    previous = session_store.get_or_create(session_id)
+    user_text = str(getattr(msg, "text", "") or getattr(msg, "raw_content", "") or "")
+    current_task = _pick_session_current_task(user_text, previous)
+    todo_items = _extract_todo_items_from_task(current_task, previous, user_text)
+    recent_decisions = _build_recent_decisions(previous, user_text, response_text, actual_tier)
+    last_tool_summary = _build_last_tool_summary(owner_tool_trace, actual_tier)
+    confirmed_facts = extract_confirmed_facts_from_owner_private_text(user_text, previous)
+    focus_hint = _build_focus_hint(current_task, previous)
+    open_loops = _build_open_loops(previous, current_task, user_text)
+    memory_decision_hint = _build_memory_decision_hint(user_text, current_task, confirmed_facts, last_tool_summary)
+    runtime_cfg = getattr(builder, "runtime_config", None)
+    rolling_enabled = bool(getattr(runtime_cfg, "get_bool", lambda *a, **k: False)("private_context_rolling_summary_enabled", False)) if runtime_cfg is not None else False
+    rolling_budget = int(getattr(runtime_cfg, "get", lambda *a, **k: 500)("private_context_rolling_summary_char_budget", 500) or 500) if runtime_cfg is not None else 500
+    rolling_min_turns = int(getattr(runtime_cfg, "get", lambda *a, **k: 2)("private_context_rolling_summary_update_min_turns", 2) or 2) if runtime_cfg is not None else 2
+    next_turn_count = int(getattr(previous, "turn_count", 0) or 0) + 1
+    rolling_summary = _build_rolling_summary(
+        previous,
+        user_text,
+        response_text,
+        actual_tier,
+        last_tool_summary,
+        current_task,
+        confirmed_facts,
+        enabled=rolling_enabled,
+        char_budget=rolling_budget,
+        update_min_turns=rolling_min_turns,
+    )
+    session_state_diff_summary = _build_session_state_diff_summary(
+        previous,
+        current_task=current_task,
+        todo_items=todo_items,
+        recent_decisions=recent_decisions,
+        focus_hint=focus_hint,
+        open_loops=open_loops,
+        memory_decision_hint=memory_decision_hint,
+        rolling_summary=rolling_summary,
+        confirmed_facts=confirmed_facts,
+        last_tool_summary=last_tool_summary,
+    )
+    session_store.update(
+        session_id,
+        current_task=current_task,
+        rolling_summary=rolling_summary,
+        confirmed_facts=confirmed_facts,
+        todo_items=todo_items,
+        recent_decisions=recent_decisions,
+        last_tool_summary=last_tool_summary,
+        focus_hint=focus_hint,
+        open_loops=open_loops,
+        memory_decision_hint=memory_decision_hint,
+        session_state_diff_summary=session_state_diff_summary,
+        turn_count=next_turn_count,
+    )
+
+
 def _resolve_plugin_memory_root(plugin_settings: dict[str, Any] | None = None) -> Path:
     return resolve_memory_root(
         plugin_config=plugin_settings or {},
@@ -229,6 +708,57 @@ def register_internal_model_switch_api() -> None:
         if forwarded:
             client_host = forwarded.split(',')[0].strip() or client_host
         return client_host
+
+    def _ensure_event_loop_probe() -> None:
+        if getattr(app.state, '_yy_loop_probe_started', False):
+            return
+
+        async def _loop_probe() -> None:
+            loop = asyncio.get_running_loop()
+            logger.warning('yangyang probe: event loop lag probe started')
+            while True:
+                planned = loop.time() + 1.0
+                await asyncio.sleep(1.0)
+                lag_ms = round(max(loop.time() - planned, 0.0) * 1000, 2)
+                if lag_ms >= 800:
+                    logger.warning(f'yangyang probe: event loop lag detected lag_ms={lag_ms}')
+
+        try:
+            asyncio.create_task(_loop_probe())
+            app.state._yy_loop_probe_started = True
+        except Exception:
+            logger.exception('yangyang probe: failed to start event loop lag probe')
+
+    @app.on_event('startup')
+    async def _yy_probe_startup() -> None:
+        _ensure_event_loop_probe()
+        logger.warning('yangyang probe: startup hook armed')
+
+    @app.middleware('http')
+    async def _yy_probe_http_middleware(request: Request, call_next):
+        path = str(getattr(request.url, 'path', '') or '')
+        if not path.startswith('/yy/api/'):
+            return await call_next(request)
+        request_id = hashlib.md5(f"{time.time_ns()}:{path}".encode('utf-8')).hexdigest()[:10]
+        client_host = _client_host(request)
+        started = time.perf_counter()
+        logger.warning(
+            f"yangyang probe: http enter request_id={request_id} method={request.method} path={path} client={client_host}"
+        )
+        try:
+            response = await call_next(request)
+        except Exception:
+            elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+            logger.exception(
+                f"yangyang probe: http error request_id={request_id} method={request.method} path={path} elapsed_ms={elapsed_ms}"
+            )
+            raise
+        elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+        logger.warning(
+            f"yangyang probe: http exit request_id={request_id} method={request.method} path={path} status={response.status_code} elapsed_ms={elapsed_ms}"
+        )
+        response.headers['X-YY-Probe-Request-ID'] = request_id
+        return response
 
     @app.post('/yy/api/model/switch')
     async def _yy_internal_model_switch(request: Request) -> JSONResponse:
@@ -438,13 +968,18 @@ def register_internal_model_switch_api() -> None:
             queue: asyncio.Queue[tuple[str, dict[str, Any]]] = asyncio.Queue()
             finished = asyncio.Event()
             client_disconnected = False
+            first_delta_seen = False
 
             async def _on_stream_delta(delta_text, meta):
+                nonlocal first_delta_seen
                 if finished.is_set():
                     return
                 delta = str(delta_text or '')
                 if not delta:
                     return
+                if not first_delta_seen:
+                    first_delta_seen = True
+                    logger.info('yangyang plugin: internal sse first_delta session_id=%s delta_preview=%s', session_id, escape_log_preview(delta, limit=80))
                 await queue.put((
                     'plain',
                     {
@@ -457,6 +992,7 @@ def register_internal_model_switch_api() -> None:
 
             async def _run_model_call():
                 try:
+                    logger.info('yangyang plugin: internal sse model_call_start session_id=%s tier=%s channel=%s', session_id, requested_tier, channel)
                     response_text, actual_tier = await router.call(
                         requested_tier,
                         messages,
@@ -511,6 +1047,7 @@ def register_internal_model_switch_api() -> None:
                 finally:
                     finished.set()
 
+            logger.info('yangyang plugin: internal sse stream_open session_id=%s tier=%s', session_id, requested_tier)
             yield _yy_sse_encode('proxy_open', {
                 'ok': True,
                 'scope': scope,
@@ -518,6 +1055,7 @@ def register_internal_model_switch_api() -> None:
                 'requested_tier': requested_tier,
             })
             yield _yy_sse_encode('session_id', {'session_id': session_id})
+            logger.info('yangyang plugin: internal sse proxy_open_sent session_id=%s', session_id)
 
             task = asyncio.create_task(_run_model_call())
             try:
@@ -566,49 +1104,66 @@ def register_internal_model_switch_api() -> None:
 
     @app.get('/yy/api/model/status')
     async def _yy_internal_model_status(request: Request) -> JSONResponse:
-        if not _is_loopback_host(_client_host(request)):
+        client_host = _client_host(request)
+        if not _is_loopback_host(client_host):
             return JSONResponse({'ok': False, 'error': 'forbidden'}, status_code=403)
-        private_data = get_active_model_profile(cfg, scope='private', context_channel='private')
-        group_data = get_active_model_profile(cfg, scope='group', context_channel='group')
-        profiles = list_model_profiles(cfg, scope='private', include_disabled=True, context_channel='private')
-        isaac_profile = str(cfg.get('isaac.model_profile', '') or '')
-        isaac_fallback = str(cfg.get('isaac.fallback_model_profile', '') or '')
-        private_fallback = str(cfg.get('model_profile_switcher.fallback_profile_private', '') or '')
-        group_fallback = str(cfg.get('model_profile_switcher.fallback_profile_group', '') or '')
-        isaac_fallback_chain = list(cfg.get('isaac.fallback_profiles', []) or [])
-        private_fallback_chain = list(cfg.get('model_profile_switcher.fallback_profiles_private', []) or [])
-        group_fallback_chain = list(cfg.get('model_profile_switcher.fallback_profiles_group', []) or [])
-        fallback_runtime = {
-            'used': bool(getattr(router, 'last_call_fallback_used', False)),
-            'from_profile': str(getattr(router, 'last_call_fallback_from', '') or ''),
-            'to_profile': str(getattr(router, 'last_call_fallback_to', '') or ''),
-            'reason': str(getattr(router, 'last_call_fallback_reason', '') or ''),
-            'at': float(getattr(router, 'last_call_fallback_at', 0.0) or 0.0),
-            'requested_tier': str(getattr(router, 'last_call_requested_tier', '') or ''),
-            'resolved_profile': str(getattr(router, 'last_call_resolved_profile', '') or ''),
-            'channel_scope': str(getattr(router, 'last_call_channel_scope', '') or ''),
-        }
-        fallback_history = list(getattr(router, 'fallback_history', []) or [])
-        fallback_stats = dict(getattr(router, 'fallback_stats', {}) or {})
-        return JSONResponse({
-            'ok': True,
-            'mode': 'runtime_status',
-            'private_active': private_data.get('profile_id'),
-            'group_active': group_data.get('profile_id'),
-            'private_profile': private_data.get('profile'),
-            'group_profile': group_data.get('profile'),
-            'isaac_profile': isaac_profile,
-            'isaac_fallback_profile': isaac_fallback,
-            'private_fallback_profile': private_fallback,
-            'group_fallback_profile': group_fallback,
-            'isaac_fallback_profiles': isaac_fallback_chain,
-            'private_fallback_profiles': private_fallback_chain,
-            'group_fallback_profiles': group_fallback_chain,
-            'fallback_runtime': fallback_runtime,
-            'fallback_history': fallback_history,
-            'fallback_stats': fallback_stats,
-            'profiles': profiles.get('profiles', []),
-        })
+        started_at = time.perf_counter()
+        request_id = request.headers.get('x-yy-probe-request-id') or f"status-{int(time.time() * 1000)}"
+        logger.warning(f"yangyang probe: model status enter request_id={request_id} client={client_host}")
+        try:
+            sampled_at = time.time()
+            private_data = get_active_model_profile(cfg, scope='private', context_channel='private')
+            group_data = get_active_model_profile(cfg, scope='group', context_channel='group')
+            profiles = list_model_profiles(cfg, scope='private', include_disabled=True, context_channel='private')
+            isaac_profile = str(cfg.get('isaac.model_profile', '') or '')
+            isaac_fallback = str(cfg.get('isaac.fallback_model_profile', '') or '')
+            private_fallback = str(cfg.get('model_profile_switcher.fallback_profile_private', '') or '')
+            group_fallback = str(cfg.get('model_profile_switcher.fallback_profile_group', '') or '')
+            isaac_fallback_chain = list(cfg.get('isaac.fallback_profiles', []) or [])
+            private_fallback_chain = list(cfg.get('model_profile_switcher.fallback_profiles_private', []) or [])
+            group_fallback_chain = list(cfg.get('model_profile_switcher.fallback_profiles_group', []) or [])
+            fallback_runtime = {
+                'used': bool(getattr(router, 'last_call_fallback_used', False)),
+                'from_profile': str(getattr(router, 'last_call_fallback_from', '') or ''),
+                'to_profile': str(getattr(router, 'last_call_fallback_to', '') or ''),
+                'reason': str(getattr(router, 'last_call_fallback_reason', '') or ''),
+                'at': float(getattr(router, 'last_call_fallback_at', 0.0) or 0.0),
+                'requested_tier': str(getattr(router, 'last_call_requested_tier', '') or ''),
+                'resolved_profile': str(getattr(router, 'last_call_resolved_profile', '') or ''),
+                'channel_scope': str(getattr(router, 'last_call_channel_scope', '') or ''),
+            }
+            fallback_history = list(getattr(router, 'fallback_history', []) or [])
+            fallback_stats = dict(getattr(router, 'fallback_stats', {}) or {})
+            attempt_trace = list(getattr(router, 'last_call_attempt_trace', []) or [])
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            logger.warning(f"yangyang probe: model status exit request_id={request_id} ok=1 elapsed_ms={elapsed_ms}")
+            return JSONResponse({
+                'ok': True,
+                'mode': 'runtime_status',
+                'sampled_at': sampled_at,
+                'status_latency_ms': elapsed_ms,
+                'probe_request_id': request_id,
+                'private_active': private_data.get('profile_id'),
+                'group_active': group_data.get('profile_id'),
+                'private_profile': private_data.get('profile'),
+                'group_profile': group_data.get('profile'),
+                'isaac_profile': isaac_profile,
+                'isaac_fallback_profile': isaac_fallback,
+                'private_fallback_profile': private_fallback,
+                'group_fallback_profile': group_fallback,
+                'isaac_fallback_profiles': isaac_fallback_chain,
+                'private_fallback_profiles': private_fallback_chain,
+                'group_fallback_profiles': group_fallback_chain,
+                'fallback_runtime': fallback_runtime,
+                'fallback_history': fallback_history,
+                'fallback_stats': fallback_stats,
+                'attempt_trace': attempt_trace,
+                'profiles': profiles.get('profiles', []),
+            })
+        except Exception:
+            elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+            logger.exception(f"yangyang probe: model status crash request_id={request_id} elapsed_ms={elapsed_ms}")
+            return JSONResponse({'ok': False, 'error': 'runtime_status_failed', 'probe_request_id': request_id}, status_code=500)
 
     globals()['_yy_internal_model_status'] = _yy_internal_model_status
     app.state._yy_internal_model_status = _yy_internal_model_status
@@ -662,7 +1217,11 @@ def initialize_plugin(context: Any = None, config: Any = None, plugin_config: An
     skill_loader = SkillLoader(str(DATA_DIR / "skills"))
     cooldown = CooldownManager(cfg)
     router = ModelRouter(cfg)
-    builder = PromptBuilder(store, skill_loader)
+    session_state_store = PrivateContextSessionStateStore(
+        persist_enabled=cfg.get_bool("private_context_rolling_summary_persist_enabled", False),
+        state_path=cfg.get("private_context_rolling_summary_state_path", "data/private_context_session_state.json"),
+    )
+    builder = PromptBuilder(store, skill_loader, runtime_config=cfg, session_state_store=session_state_store)
     engine = DecisionEngine(store, skill_loader)
     _sync_runtime_components()
     return plugin_settings
@@ -835,14 +1394,14 @@ def _capture_short_term_memory(msg) -> bool:
 
 def _log_current_session_smoke_trigger_result(msg, smoke_command, reload_status: str) -> None:
     logger.info(
-        "yangyang plugin: current-session smoke trigger matched uid=%s channel=%s reload_status=%s enabled=%s dry_run=%s reason=%s inner_text=%s",
-        getattr(msg, "uid", ""),
-        getattr(msg, "channel", ""),
-        reload_status,
-        cfg.get_bool("owner_action_manual_smoke_enabled", False),
-        _is_dry_run_enabled(),
-        getattr(smoke_command, "reason", ""),
-        getattr(smoke_command, "inner_text", ""),
+        f"yangyang plugin: current-session smoke trigger matched "
+        f"uid={getattr(msg, 'uid', '')} "
+        f"channel={getattr(msg, 'channel', '')} "
+        f"reload_status={reload_status} "
+        f"enabled={cfg.get_bool('owner_action_manual_smoke_enabled', False)} "
+        f"dry_run={_is_dry_run_enabled()} "
+        f"reason={getattr(smoke_command, 'reason', '')} "
+        f"inner_text={getattr(smoke_command, 'inner_text', '')}"
     )
 
 def _summarize_text_for_log(text: str, limit: int = 80) -> str:
@@ -863,21 +1422,21 @@ def _log_decision_trace(msg, decision) -> None:
         return
 
     logger.info(
-        "yangyang plugin: decision_trace uid=%s group_id=%s channel=%s bot_self_id=%s text=%s at_user_ids=%s is_at_bot=%s is_owner=%s owner_command=%s explicit_command=%s should_reply=%s reason=%s is_forced=%s model_tier=%s",
-        getattr(msg, "uid", ""),
-        getattr(msg, "group_id", ""),
-        getattr(msg, "channel", ""),
-        getattr(msg, "bot_self_id", ""),
-        _summarize_text_for_log(getattr(msg, "text", "")),
-        getattr(msg, "at_user_ids", []),
-        getattr(msg, "is_at_bot", False),
-        getattr(msg, "is_owner", False),
-        getattr(msg, "owner_command", False),
-        getattr(msg, "explicit_command", False),
-        getattr(decision, "should_reply", False),
-        getattr(decision, "reason", ""),
-        getattr(decision, "is_forced", False),
-        getattr(decision, "model_tier", None),
+        f"yangyang plugin: decision_trace "
+        f"uid={getattr(msg, 'uid', '')} "
+        f"group_id={getattr(msg, 'group_id', '')} "
+        f"channel={getattr(msg, 'channel', '')} "
+        f"bot_self_id={getattr(msg, 'bot_self_id', '')} "
+        f"text={_summarize_text_for_log(getattr(msg, 'text', ''))} "
+        f"at_user_ids={getattr(msg, 'at_user_ids', [])} "
+        f"is_at_bot={getattr(msg, 'is_at_bot', False)} "
+        f"is_owner={getattr(msg, 'is_owner', False)} "
+        f"owner_command={getattr(msg, 'owner_command', False)} "
+        f"explicit_command={getattr(msg, 'explicit_command', False)} "
+        f"should_reply={getattr(decision, 'should_reply', False)} "
+        f"reason={getattr(decision, 'reason', '')} "
+        f"is_forced={getattr(decision, 'is_forced', False)} "
+        f"model_tier={getattr(decision, 'model_tier', None)}"
     )
 
 
@@ -1232,24 +1791,24 @@ async def handle_message(bot: Bot, event):
             owner_action_execution_plan = build_owner_action_execution_plan(owner_action, owner_action_gate, msg, cfg)
             setattr(msg, "owner_action_execution_plan", owner_action_execution_plan)
             logger.info(
-                "yangyang plugin: parsed owner_action action=%s style=%s target_group=%s target_user=%s context_source=%s context_messages=%s context_reason=%s reason=%s dry_run=%s gate_mode=%s gate_allowed=%s gate_reason=%s exec_destination_type=%s exec_destination_id=%s exec_status=%s exec_real_send=%s exec_reason=%s",
-                owner_action.action_type,
-                owner_action.style,
-                owner_action.target_group_id,
-                owner_action.target_user_id,
-                getattr(owner_action_context, "source", None),
-                len(getattr(owner_action_context, "target_messages", None) or []),
-                getattr(owner_action_context, "reason", None),
-                owner_action.reason,
-                _is_dry_run_enabled(),
-                owner_action_gate.mode,
-                owner_action_gate.allowed,
-                owner_action_gate.reason,
-                owner_action_execution_plan.destination_type,
-                owner_action_execution_plan.destination_id,
-                owner_action_execution_plan.status,
-                owner_action_execution_plan.real_send,
-                owner_action_execution_plan.reason,
+                f"yangyang plugin: parsed owner_action "
+                f"action={owner_action.action_type} "
+                f"style={owner_action.style} "
+                f"target_group={owner_action.target_group_id} "
+                f"target_user={owner_action.target_user_id} "
+                f"context_source={getattr(owner_action_context, 'source', None)} "
+                f"context_messages={len(getattr(owner_action_context, 'target_messages', None) or [])} "
+                f"context_reason={getattr(owner_action_context, 'reason', None)} "
+                f"reason={owner_action.reason} "
+                f"dry_run={_is_dry_run_enabled()} "
+                f"gate_mode={owner_action_gate.mode} "
+                f"gate_allowed={owner_action_gate.allowed} "
+                f"gate_reason={owner_action_gate.reason} "
+                f"exec_destination_type={owner_action_execution_plan.destination_type} "
+                f"exec_destination_id={owner_action_execution_plan.destination_id} "
+                f"exec_status={owner_action_execution_plan.status} "
+                f"exec_real_send={owner_action_execution_plan.real_send} "
+                f"exec_reason={owner_action_execution_plan.reason}"
             )
 
         history = []
@@ -1474,7 +2033,7 @@ async def handle_message(bot: Bot, event):
                 run_id=progress_run_id,
                 timeout_bucket="tool_followup",
                 interaction_phase="tool_followup",
-                allow_streaming=False,
+                allow_streaming=True,
             )
             response = coerce_owner_toolbox_human_reply(response, owner_tool_trace, user_text=str(getattr(msg, "text", "") or getattr(msg, "raw_content", "") or ""))
             owner_toolbox_light_llm_result = type("OwnerToolLoopObservation", (), {
@@ -1503,9 +2062,9 @@ async def handle_message(bot: Bot, event):
                 "enabled": str(getattr(msg, "channel", "") or "") == "private",
                 "last_flush_ts": time.monotonic(),
             }
-            min_stream_chars = 16
-            eager_stream_chars = 32
-            max_stream_idle_seconds = 0.45
+            min_stream_chars = 8
+            eager_stream_chars = 20
+            max_stream_idle_seconds = 0.2
 
             async def _flush_direct_stream_buffer(force: bool = False):
                 if not stream_state["enabled"]:
@@ -1555,6 +2114,14 @@ async def handle_message(bot: Bot, event):
             setattr(msg, "sensitive_failure_error_type", getattr(router, "last_call_error_type", ""))
             setattr(msg, "sensitive_failure_hash", getattr(router, "last_call_hash", ""))
             setattr(msg, "sensitive_failure_length", getattr(router, "last_call_messages_len", 0))
+        _update_owner_private_session_state(
+            builder,
+            msg,
+            session_id,
+            response_text=str(response or ""),
+            actual_tier=str(actual_tier or ""),
+            owner_tool_trace=owner_tool_trace if 'owner_tool_trace' in locals() else None,
+        )
         captured = _capture_short_term_memory(msg)
         memory_observation = _collect_memory_observation(msg, decision, captured=captured, session_id=session_id, messages=messages)
         setattr(msg, "memory_observation", memory_observation)
@@ -1571,18 +2138,23 @@ async def handle_message(bot: Bot, event):
             )
             setattr(msg, "owner_action_reply_draft", owner_action_reply_draft)
             logger.info(
-                "yangyang plugin: owner_action_reply_draft destination_type=%s destination_id=%s status=%s length=%s real_send=%s reason=%s",
-                owner_action_reply_draft.destination_type,
-                owner_action_reply_draft.destination_id,
-                owner_action_reply_draft.status,
-                owner_action_reply_draft.content_length,
-                owner_action_reply_draft.real_send,
-                owner_action_reply_draft.reason,
+                f"yangyang plugin: owner_action_reply_draft "
+                f"destination_type={owner_action_reply_draft.destination_type} "
+                f"destination_id={owner_action_reply_draft.destination_id} "
+                f"status={owner_action_reply_draft.status} "
+                f"length={owner_action_reply_draft.content_length} "
+                f"real_send={owner_action_reply_draft.real_send} "
+                f"reason={owner_action_reply_draft.reason}"
             )
-            # 当前会话真实投递集成入口：默认 explicit_enable=False，不接管生产，仅保留明确薄层注入点。
-            # 若要做 owner 手动 smoke test，请显式调用 run_current_session_manual_smoke_if_enabled(...)
-            # 并同时满足：manual_smoke_enabled + nonebot_sender_enabled + execution_enabled +
-            # allow_reply_current + current_session_delivery_enabled + explicit_enable=True + bot/event 注入。
+            production_current_session_enabled = (
+                _is_owner_private_message(msg)
+                and str(getattr(owner_action, "action_type", "") or "") == "reply_current"
+                and str(getattr(owner_action_execution_plan, "destination_type", "") or "") == "current_session"
+                and cfg.get_bool("owner_action_auto_reply_current_production_enabled", False)
+            )
+            # 当前会话真实投递集成入口：
+            # - 手动 smoke 仍走显式触发链；
+            # - 生产自动回传仅限 owner 私聊 reply_current/current_session，且受独立开关控制。
             owner_action_delivery_integration_result = await deliver_owner_action_current_session_if_enabled(
                 owner_action_reply_draft,
                 owner_action,
@@ -1591,7 +2163,7 @@ async def handle_message(bot: Bot, event):
                 cfg,
                 bot=bot,
                 event=event,
-                explicit_enable=False,
+                explicit_enable=production_current_session_enabled,
                 dry_run=_is_dry_run_enabled(),
                 gate=owner_action_gate,
             )
@@ -1603,12 +2175,12 @@ async def handle_message(bot: Bot, event):
             owner_action_delivery_safety_result = getattr(msg, "owner_action_delivery_safety_result", None)
             if owner_action_delivery_result is not None:
                 logger.info(
-                    "yangyang plugin: owner_action_delivery_result mode=%s attempted=%s delivered=%s real_send=%s reason=%s",
-                    owner_action_delivery_result.mode,
-                    owner_action_delivery_result.attempted,
-                    owner_action_delivery_result.delivered,
-                    owner_action_delivery_result.real_send,
-                    owner_action_delivery_result.reason,
+                    f"yangyang plugin: owner_action_delivery_result "
+                    f"mode={owner_action_delivery_result.mode} "
+                    f"attempted={owner_action_delivery_result.attempted} "
+                    f"delivered={owner_action_delivery_result.delivered} "
+                    f"real_send={owner_action_delivery_result.real_send} "
+                    f"reason={owner_action_delivery_result.reason}"
                 )
         if _is_dry_run_enabled() and owner_action is not None:
             action_summary = _format_owner_action_summary(owner_action)

@@ -2795,8 +2795,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
     if safety_class == "high_risk" or status == "need_confirm" or bool(facts.get("requires_confirm")):
         variants = {
             "yangyang": (
-                "这个命令风险偏高，我先停住了。阿漂确认后我再继续。",
-                "这一步风险有点高，阿漂，我先不执行；等你确认后再继续。",
+                "这个命令风险偏高，我先停住了。漂♂总确认后我再继续。",
+                "这一步风险有点高，漂♂总，我先不执行；等你确认后再继续。",
             ),
             "yaya": (
                 "这条不能直接冲，风险高。你确认，我再跑。",
@@ -2813,8 +2813,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
         if subtype == "cold_backup":
             variants = {
                 "yangyang": (
-                    "冷备这块不能直接展开，阿漂。给我相对工作区路径，或走受控交接会更稳。",
-                    "冷备位置我不能直接翻，阿漂。换相对工作区路径，或者走受控交接。",
+                    "冷备这块不能直接展开，漂♂总。给我相对工作区路径，或走受控交接会更稳。",
+                    "冷备位置我不能直接翻，漂♂总。换相对工作区路径，或者走受控交接。",
                 ),
                 "yaya": (
                     "冷备不能硬看，会踩线。换相对工作区路径，或者走受控交接。",
@@ -2828,8 +2828,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
         elif subtype == "production_root":
             variants = {
                 "yangyang": (
-                    "生产目录我不能直接翻，阿漂。要看内容请走受控交接。",
-                    "生产位置不直接展开，阿漂；这块请走受控交接。",
+                    "生产目录我不能直接翻，漂♂总。要看内容请走受控交接。",
+                    "生产位置不直接展开，漂♂总；这块请走受控交接。",
                 ),
                 "yaya": (
                     "生产根不能直接碰，这条我先拦住。",
@@ -2843,8 +2843,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
         else:
             variants = {
                 "yangyang": (
-                    "这个位置不能直接展开，阿漂。换成相对工作区路径，或走受控交接会更稳。",
-                    "这块我先不碰，阿漂。请给相对工作区路径，或走受控交接。",
+                    "这个位置不能直接展开，漂♂总。换成相对工作区路径，或走受控交接会更稳。",
+                    "这块我先不碰，漂♂总。请给相对工作区路径，或走受控交接。",
                 ),
                 "yaya": (
                     "这块不能硬看，会踩线。给相对工作区路径，或者走受控交接。",
@@ -2859,8 +2859,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
     elif status == "timeout" or safety_class == "timeout":
         variants = {
             "yangyang": (
-                "这次等太久没拿到结果，阿漂。可以缩小范围再试一次。",
-                "这次超时了，阿漂。缩小范围后再跑会更稳。",
+                "这次等太久没拿到结果，漂♂总。可以缩小范围再试一次。",
+                "这次超时了，漂♂总。缩小范围后再跑会更稳。",
             ),
             "yaya": (
                 "超时了，没跑完。缩小一下范围再蹬比较稳。",
@@ -2876,8 +2876,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
         summary = value or _sanitize_user_detail(base.replace("执行失败，输出：", "").replace("执行失败", "")).strip(" ：:")[:80]
         variants = {
             "yangyang": (
-                f"这次没跑成，阿漂。{summary or '可以检查参数后再试一次。'}",
-                f"结果没成功，阿漂；{summary or '先缩小范围再试。'}",
+                f"这次没跑成，漂♂总。{summary or '可以检查参数后再试一次。'}",
+                f"结果没成功，漂♂总；{summary or '先缩小范围再试。'}",
             ),
             "yaya": (
                 f"没跑成，先别当完成。{summary or '检查一下参数再来。'}",
@@ -2892,9 +2892,9 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
     elif tool == "list_dir" and status == "ok" and bool(facts.get("empty")):
         variants = {
             "yangyang": (
-                f"{target} 现在是空的，阿漂。",
-                f"阿漂，{target} 里暂时没有东西。",
-                f"{target} 当前为空，阿漂。",
+                f"{target} 现在是空的，漂♂总。",
+                f"漂♂总，{target} 里暂时没有东西。",
+                f"{target} 当前为空，漂♂总。",
             ),
             "yaya": (
                 f"{target} 是空的，没藏东西。",
@@ -2912,8 +2912,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
         items_short = "、".join(items[:5])
         variants = {
             "yangyang": (
-                f"{target} 里有：{items_short}，阿漂。",
-                f"阿漂，{target} 下能看到：{items_short}。",
+                f"{target} 里有：{items_short}，漂♂总。",
+                f"漂♂总，{target} 下能看到：{items_short}。",
             ),
             "yaya": (
                 f"{target} 有：{items_short}，东西都摆这儿了。",
@@ -2928,8 +2928,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
     elif tool == "python" and status == "ok" and value:
         variants = {
             "yangyang": (
-                f"算出来是 {value}，阿漂。",
-                f"阿漂，结果是 {value}。",
+                f"算出来是 {value}，漂♂总。",
+                f"漂♂总，结果是 {value}。",
             ),
             "yaya": (
                 f"结果是 {value}，没跑偏。",
@@ -2944,8 +2944,8 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
     elif tool == "toolbox_status" and status == "ok":
         variants = {
             "yangyang": (
-                "工具箱状态正常，阿漂，可以继续用。",
-                "这边工具箱正常，阿漂。",
+                "工具箱状态正常，漂♂总，可以继续用。",
+                "这边工具箱正常，漂♂总。",
             ),
             "yaya": (
                 "工具箱活着，能使唤。",
@@ -2959,12 +2959,12 @@ def _apply_persona_style(base_text: str, facts: Mapping[str, Any], persona: str 
         text = _persona_variant(variants[persona_name], *fingerprint)
     elif status == "ok" and "\n" not in base and len(base) <= 120:
         tails = {
-            "yangyang": ("阿漂。", "这边好了，阿漂。"),
+            "yangyang": ("漂♂总。", "这边好了，漂♂总。"),
             "yaya": ("搞定。", "这下清楚了。"),
             "isaac": ("完成。", "已完成。"),
         }
         tail = _persona_variant(tails[persona_name], *fingerprint)
-        if persona_name == "yangyang" and "阿漂" not in base:
+        if persona_name == "yangyang" and "漂♂总" not in base:
             text = base.rstrip("。") + f"，{tail}"
         elif persona_name == "yaya" and not any(word in base for word in ("搞定", "清楚")):
             text = base.rstrip("。") + f"，{tail}"
@@ -3395,7 +3395,7 @@ def _facts_for_llm_formatter(
 def _build_result_formatter_prompt(facts: Mapping[str, Any]) -> list[dict[str, str]]:
     persona = str(facts.get("persona") or "default")
     persona_rules = {
-        "yangyang": "秧秧：温柔、简洁，像给阿漂递小纸条；可以自然称呼阿漂，但不要卖萌过度。",
+        "yangyang": "秧秧：温柔、简洁，像给漂♂总递小纸条；可以自然称呼漂♂总，但不要卖萌过度。",
         "yaya": "娅娅：利落、活泼，可以轻微吐槽；不要攻击用户，不泄密。",
         "isaac": "I叔：工程师短报文，可靠、干脆；不要冷冰冰 dump 字段。",
         "default": "默认：自然、简短、清楚。",

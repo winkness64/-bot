@@ -95,7 +95,7 @@ async def run_owner_action_dryrun_case(
             message_id=f"case-{user_id}-{group_id or 'private'}-{abs(hash((text, user_id, group_id))) % 100000}",
             message=[Seg("text", text=text)],
             raw_message=raw_message or text,
-            sender=FakeSenderInfo("阿漂" if user_id == "335059272" else "普通群友"),
+            sender=FakeSenderInfo("漂♂总" if user_id == "335059272" else "普通群友"),
             group_id=group_id,
             reply=reply,
         )

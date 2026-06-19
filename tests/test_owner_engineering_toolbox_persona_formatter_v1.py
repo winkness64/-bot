@@ -90,12 +90,12 @@ def _assert_short(reply: str, *, max_lines: int = 2, max_chars: int = 120) -> No
 
 def _assert_persona_feature(reply: str, persona: str) -> None:
     if persona == "yangyang":
-        assert "阿漂" in reply or any(word in reply for word in ("这边", "我先", "更稳"))
+        assert "漂♂总" in reply or any(word in reply for word in ("这边", "我先", "更稳"))
     elif persona == "yaya":
         assert any(word in reply for word in ("没藏", "清清爽爽", "别硬", "硬看", "硬闯", "踩线", "活着", "能使唤", "没跑偏", "先刹", "别当完成"))
     elif persona == "isaac":
         assert any(word in reply for word in ("：", "已", "未执行", "正常", "为空", "结果"))
-        assert "阿漂" not in reply
+        assert "漂♂总" not in reply
 
 
 def test_normalize_persona_aliases() -> None:

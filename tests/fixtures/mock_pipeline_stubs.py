@@ -66,6 +66,16 @@ def install_nonebot_stubs() -> None:
                 return func
             return deco
 
+        def on_event(self, *args, **kwargs):
+            def deco(func):
+                return func
+            return deco
+
+        def middleware(self, *args, **kwargs):
+            def deco(func):
+                return func
+            return deco
+
     class _FakeDriver:
         def __init__(self):
             self.server_app = _FakeApp()
@@ -139,16 +149,19 @@ def install_nonebot_stubs() -> None:
     sys.modules["apscheduler.schedulers.asyncio"] = apscheduler_asyncio_mod
 
 
-def ensure_package(name: str, path: Path) -> None:
-    mod = types.ModuleType(name)
-    mod.__path__ = [str(path)]
-    sys.modules.setdefault(name, mod)
+def ensure_package(name: str, path: Path) -> types.ModuleType:
+    mod = sys.modules.get(name)
+    if mod is None:
+        mod = types.ModuleType(name)
+        mod.__path__ = [str(path)]
+        sys.modules[name] = mod
+    return mod
 
 
-def load_module(module_name: str, file_path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
+def load_module(name: str, file_path: Path):
+    spec = importlib.util.spec_from_file_location(name, file_path)
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     assert spec and spec.loader
-    sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module

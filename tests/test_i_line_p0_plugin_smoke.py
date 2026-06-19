@@ -100,7 +100,7 @@ def test_i_line_p0_plugin_owner_private_slash_roundtrip_current_session() -> Non
             message_id="i-p0-owner-1",
             message=[Seg("text", text="/i叔 health")],
             raw_message="/i叔 health",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
 
         await plugin.handle_message(bot, event)
@@ -160,7 +160,7 @@ def test_i_line_p0_plugin_owner_group_does_not_expose_isaac() -> None:
             message_id="i-p0-owner-group-1",
             message=[Seg("text", text="/i叔 health")],
             raw_message="/i叔 health",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
             group_id="137918147",
         )
 
@@ -193,7 +193,7 @@ def test_i_line_p0_plugin_owner_private_bare_i_uncle_uses_native_tool_loop(monke
             message_id="i-p0-owner-bare-1",
             message=[Seg("text", text="I叔 帮我看看状态")],
             raw_message="I叔 帮我看看状态",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
 
         await plugin.handle_message(bot, event)
@@ -261,7 +261,7 @@ def test_i_line_p0_plugin_internal_sse_route_streams_events(monkeypatch) -> None
         async def fake_call(tier, messages, **kwargs):
             callback = kwargs.get("stream_callback")
             if callback is not None:
-                await callback("阿漂", {"seq": 1})
+                await callback("漂♂总", {"seq": 1})
                 await callback(" 收到", {"seq": 2})
             _plugin.router.last_call_request_id = "req_stream_1"
             _plugin.router.last_call_resolved_profile = "v4_flash"
@@ -269,7 +269,7 @@ def test_i_line_p0_plugin_internal_sse_route_streams_events(monkeypatch) -> None
             _plugin.router.last_call_fallback_from = ""
             _plugin.router.last_call_fallback_to = ""
             _plugin.router.last_call_fallback_reason = ""
-            return "阿漂 收到", "v4_flash"
+            return "漂♂总 收到", "v4_flash"
 
         monkeypatch.setattr(_plugin.router, "call", fake_call)
         handler = getattr(_plugin, "_yy_internal_chat_send_stream")

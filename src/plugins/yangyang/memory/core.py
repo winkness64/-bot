@@ -36,7 +36,7 @@ class MemorySystem:
         self.base_dir = Path(base_dir)
         self.short_term_limit = max(1, int(short_term_limit))
         self.prompt_char_budget = 2400
-        self.prompt_short_term_item_limit = 8
+        self.prompt_short_term_item_limit = 50
         self.prompt_profile_char_budget = 800
         self.prompt_impression_char_budget = 500
         self.prompt_relation_char_budget = 400

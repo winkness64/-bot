@@ -9,7 +9,11 @@ from loguru import logger
 
 from .decision_engine import Decision
 from .event_adapter import Message
-from .owner_action_context_resolver import build_owner_action_context_prompt
+from .owner_action_context_resolver import (
+    build_owner_action_context_prompt,
+    build_owner_private_task_snapshot,
+)
+from .private_context_session_state import PrivateContextSessionState, PrivateContextSessionStateStore
 from .runtime_compat import escape_log_preview
 from ..knowledge import KnowledgeBase, KnowledgeConfig
 
@@ -24,7 +28,7 @@ class PromptBuilder:
     OWNER_UID = "335059272"
     OWNER_COLD_BACKUP_PATH = "/opt/yangyang_nonebot/秧秧冷备份/"
     PUBLIC_FACT_RELATION_KEYWORDS = (
-        "阿漂",
+        "漂♂总",
         "漂泊者",
         "娅娅",
         "达妮娅",
@@ -98,10 +102,19 @@ class PromptBuilder:
         "file location",
     )
 
-    def __init__(self, store=None, skill_loader=None, memory_enabled: bool = False):
+    def __init__(
+        self,
+        store=None,
+        skill_loader=None,
+        memory_enabled: bool = False,
+        session_state_store: PrivateContextSessionStateStore | None = None,
+        runtime_config: Any | None = None,
+    ):
         self.store = store
         self.skill_loader = skill_loader
         self.memory_enabled = memory_enabled
+        self.runtime_config = runtime_config
+        self.session_state_store = session_state_store or PrivateContextSessionStateStore()
         self.knowledge_enabled = False
         self.knowledge_root_dir = "src/plugins/yangyang/data/knowledge"
         self.knowledge_top_k = 3
@@ -148,6 +161,14 @@ class PromptBuilder:
         )
         if owner_private_context:
             base_parts.append(owner_private_context)
+
+        prompt_overlay = self._prompt_overlay_context(
+            channel=channel,
+            sender_uid=sender_uid,
+            target_uid=target_uid,
+        )
+        if prompt_overlay:
+            base_parts.append(prompt_overlay)
 
         public_fact_context = self._public_fact_fallback_context(
             channel=channel,
@@ -213,8 +234,19 @@ class PromptBuilder:
         if owner_action_context:
             messages.append({"role": "system", "content": owner_action_context})
 
-        if history:
-            for item in history[-12:]:
+        self._maybe_backfill_rolling_summary_from_history(msg, resolved_session_id, history)
+
+        session_anchor = self._build_session_anchor_prompt(msg, resolved_session_id)
+        if session_anchor:
+            messages.append({"role": "system", "content": session_anchor})
+
+        rolling_summary = self._build_rolling_summary_prompt(msg, resolved_session_id)
+        if rolling_summary:
+            messages.append({"role": "system", "content": rolling_summary})
+
+        effective_history = self._select_effective_history(msg, resolved_session_id, history)
+        if effective_history:
+            for item in effective_history:
                 nick = item.get("nick") or item.get("uid") or "群友"
                 text = item.get("text") or ""
                 if not text:
@@ -231,9 +263,9 @@ class PromptBuilder:
         uid = str(getattr(msg, "uid", "") or "").strip()
         channel = str(getattr(msg, "channel", "") or "").strip().lower()
         if channel == "private" and uid == self.OWNER_UID:
-            return "阿漂"
+            return "漂♂总"
         nick = str(getattr(msg, "nick", "") or "").strip()
-        if channel == "private" and ("阿漂" in nick or "漂泊者" in nick):
+        if channel == "private" and ("漂♂总" in nick or "漂泊者" in nick):
             return "用户"
         return nick or "用户"
 
@@ -242,10 +274,194 @@ class PromptBuilder:
             return f"group:{str(getattr(msg, 'group_id', '') or '')}"
         return f"private:{str(getattr(msg, 'uid', '') or '')}"
 
+
+    def _is_owner_private_message(self, msg: Message) -> bool:
+        channel = str(getattr(msg, "channel", "") or "").strip().lower()
+        uid = str(getattr(msg, "uid", "") or "").strip()
+        return channel == "private" and uid == self.OWNER_UID
+
+    def _cfg_str(self, key: str, default: str = "") -> str:
+        cfg = self.runtime_config
+        if cfg is None:
+            return default
+        getter = getattr(cfg, "get", None)
+        if callable(getter):
+            try:
+                value = getter(key, default)
+            except Exception:
+                value = default
+        else:
+            value = default
+        if value is None:
+            return default
+        return str(value)
+
+    def _cfg_bool(self, key: str, default: bool = False) -> bool:
+        cfg = self.runtime_config
+        if cfg is None:
+            return default
+        getter = getattr(cfg, "get_bool", None)
+        if callable(getter):
+            try:
+                return bool(getter(key, default))
+            except Exception:
+                return default
+        getter = getattr(cfg, "get", None)
+        if callable(getter):
+            try:
+                return bool(getter(key, default))
+            except Exception:
+                return default
+        return default
+
+    def _cfg_int(self, key: str, default: int) -> int:
+        cfg = self.runtime_config
+        if cfg is None:
+            return default
+        getter = getattr(cfg, "get", None)
+        if callable(getter):
+            try:
+                return int(getter(key, default) or default)
+            except Exception:
+                return default
+        return default
+
+    def _trim_inline(self, text: Any, limit: int) -> str:
+        value = str(text or "").replace("\n", " ").replace("\r", " ")
+        value = " ".join(value.split()).strip()
+        if not value:
+            return ""
+        if len(value) <= limit:
+            return value
+        return value[: max(limit - 1, 0)] + "…"
+
+    def _should_prefer_summary_over_long_history(self, msg: Message, session_id: str, history: list[dict[str, Any]] | None) -> bool:
+        if not history or not self._is_owner_private_message(msg):
+            return False
+        if not self._cfg_bool("private_context_summary_history_reduction_enabled", True):
+            return False
+        state = self.session_state_store.get_or_create(session_id)
+        if not self._trim_inline(getattr(state, "rolling_summary", ""), self._cfg_int("private_context_rolling_summary_char_budget", 500)):
+            return False
+        raw_threshold = self._cfg_int("private_context_summary_history_reduction_trigger", 8)
+        trigger = max(1, raw_threshold)
+        return len(history) >= trigger
+
+    def _history_limit_for_message(self, msg: Message, session_id: str, history: list[dict[str, Any]] | None) -> int:
+        default_limit = max(1, self._cfg_int("private_context_recent_history_limit", 12))
+        if not self._should_prefer_summary_over_long_history(msg, session_id, history):
+            return default_limit
+        reduced_limit = max(1, self._cfg_int("private_context_recent_history_limit_when_summary_present", 4))
+        return min(default_limit, reduced_limit)
+
+    def _select_effective_history(self, msg: Message, session_id: str, history: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+        if not history:
+            return []
+        limit = self._history_limit_for_message(msg, session_id, history)
+        return list(history[-limit:])
+
+    def _maybe_backfill_rolling_summary_from_history(self, msg: Message, session_id: str, history: list[dict[str, Any]] | None) -> str:
+        if not history or not self._is_owner_private_message(msg):
+            return ""
+        if not self._cfg_bool("private_context_rolling_summary_enabled", False):
+            return ""
+        raw_threshold = self._cfg_int("private_context_summary_history_reduction_trigger", 8)
+        trigger = max(1, raw_threshold)
+        if len(history) < trigger:
+            return ""
+        state = self.session_state_store.get_or_create(session_id)
+        existing = self._trim_inline(getattr(state, "rolling_summary", ""), self._cfg_int("private_context_rolling_summary_char_budget", 500))
+        if existing:
+            return existing
+        summary_budget = max(120, self._cfg_int("private_context_rolling_summary_char_budget", 500))
+        recent_window = max(2, min(4, self._cfg_int("private_context_recent_history_limit_when_summary_present", 4)))
+        fragments: list[str] = []
+        current_task = self._trim_inline(getattr(state, "current_task", ""), 120)
+        if current_task:
+            fragments.append(f"当前任务={current_task}")
+        focus_hint = self._trim_inline(getattr(state, "focus_hint", ""), 120)
+        if focus_hint and focus_hint != current_task:
+            fragments.append(f"焦点={focus_hint}")
+        recent_decisions = [self._trim_inline(item, 80) for item in list(getattr(state, "recent_decisions", []) or [])]
+        recent_decisions = [item for item in recent_decisions if item]
+        if recent_decisions:
+            fragments.append(f"最近决策={' | '.join(recent_decisions[-2:])}")
+        open_loops = [self._trim_inline(item, 60) for item in list(getattr(state, "open_loops", []) or [])]
+        open_loops = [item for item in open_loops if item]
+        if open_loops:
+            fragments.append(f"未闭环={' | '.join(open_loops[:2])}")
+        history_fragments: list[str] = []
+        for item in list(history)[-recent_window:]:
+            nick = self._trim_inline(item.get("nick") or item.get("uid") or ("助手" if item.get("is_bot") else "用户"), 16)
+            body = self._trim_inline(item.get("text") or item.get("content") or "", 36)
+            if body:
+                history_fragments.append(f"{nick}:{body}")
+        if history_fragments:
+            fragments.append(f"近期对话={' | '.join(history_fragments)}")
+        summary = self._trim_inline('；'.join([part for part in fragments if part]), summary_budget)
+        if not summary:
+            return ""
+        self.session_state_store.update(session_id, rolling_summary=summary)
+        return summary
+
+    def _build_rolling_summary_prompt(self, msg: Message, session_id: str) -> str:
+        if not self._is_owner_private_message(msg):
+            return ""
+        if not self._cfg_bool("private_context_rolling_summary_enabled", False):
+            return ""
+        state = self.session_state_store.get_or_create(session_id)
+        summary = self._trim_inline(getattr(state, "rolling_summary", ""), self._cfg_int("private_context_rolling_summary_char_budget", 500))
+        if not summary:
+            return ""
+        return "[RollingSummary]\n" + summary
+
+    def _build_session_anchor_prompt(self, msg: Message, session_id: str) -> str:
+        if not self._is_owner_private_message(msg):
+            return ""
+
+        state = self.session_state_store.get_or_create(session_id)
+        snapshot = build_owner_private_task_snapshot(msg, session_state=state)
+
+        lines: list[str] = ["[SessionAnchor]"]
+        if snapshot.current_task:
+            lines.append(f"current_task: {snapshot.current_task}")
+        if snapshot.confirmed_facts:
+            lines.append("confirmed_facts:")
+            for item in snapshot.confirmed_facts[:6]:
+                lines.append(f"- {item}")
+        if snapshot.todo_items:
+            lines.append("todo_items:")
+            for item in snapshot.todo_items[:6]:
+                lines.append(f"- {item}")
+        if snapshot.recent_decisions:
+            lines.append("recent_decisions:")
+            for item in snapshot.recent_decisions[:6]:
+                lines.append(f"- {item}")
+        if snapshot.last_tool_summary:
+            lines.append(f"last_tool_summary: {snapshot.last_tool_summary}")
+        if snapshot.focus_hint:
+            lines.append(f"focus_hint: {snapshot.focus_hint}")
+        if snapshot.open_loops:
+            lines.append("open_loops:")
+            for item in snapshot.open_loops[:6]:
+                lines.append(f"- {item}")
+        if snapshot.memory_decision_hint:
+            lines.append(f"memory_decision_hint: {snapshot.memory_decision_hint}")
+        if snapshot.session_state_diff_summary:
+            lines.append(f"session_state_diff: {snapshot.session_state_diff_summary}")
+        if self._cfg_bool("private_context_rolling_summary_enabled", False):
+            rolling_summary = self._trim_inline(getattr(state, "rolling_summary", ""), self._cfg_int("private_context_rolling_summary_char_budget", 500))
+            if rolling_summary:
+                lines.append(f"rolling_summary_hint: {rolling_summary}")
+        if len(lines) == 1:
+            return ""
+        lines.append("要求：以上为当前会话工作记忆锚点，优先保持主线连续，不要被闲聊和截断历史带偏。")
+        return "\n".join(lines)
+
     def _base_persona(self, channel: str, reply_style: str, sender_uid: str | None = None) -> str:
         if channel == "private":
             if str(sender_uid or "").strip() == self.OWNER_UID:
-                call_rule = "owner 私聊时直接称呼用户为『阿漂』；除非阿漂主动闲聊，否则优先按任务/工程语境回应。"
+                call_rule = "owner 私聊时直接称呼用户为『漂♂总』；除非漂♂总主动闲聊，否则优先按任务/工程语境回应。"
             else:
                 call_rule = "私聊时按对方昵称自然称呼；不要套用 owner 专属称呼。"
         else:
@@ -322,7 +538,7 @@ class PromptBuilder:
         lines = [
             "[PublicFactFallback]",
             "公开场景关系词兜底：",
-            "- 如问到“阿漂/漂泊者/娅娅/达妮娅”，只按《鸣潮》的公开角色、玩家称呼或昵称层面回答；不推断现实身份或私有关系。",
+            "- 如问到“漂♂总/漂泊者/娅娅/达妮娅”，只按《鸣潮》的公开角色、玩家称呼或昵称层面回答；不推断现实身份或私有关系。",
             "- 如问到“I叔/艾萨克/Isaac”，只按《死亡空间》的艾萨克·克拉克等公开作品信息回答。",
             "- 不把这些称呼绑定到任何真实用户、私人身份、家庭关系或系统维护设定；不知道作品细节时可以自然说明只能按公开作品理解，不要编造私设。",
         ]
@@ -373,6 +589,34 @@ class PromptBuilder:
 - 记忆入库原则：冷备只兜底；active long_term 必须精选；候选源由漂♂总指定 TXT/CMM/工程文档，不默认扫 chat-history.db；脚本只提候选，需漂♂总二次复核后入库。
 - 回复要求：owner 私聊优先给结论、依据、下一步建议；不卖萌，不走陪伴安抚口吻，不把 I叔 说成后台子模块。
 """.strip()
+
+    def _prompt_overlay_context(
+        self,
+        channel: str,
+        sender_uid: str | None = None,
+        target_uid: str | None = None,
+    ) -> str:
+        if str(channel or "").strip().lower() != "private":
+            return ""
+        if str(sender_uid or "").strip() != self.OWNER_UID:
+            return ""
+        resolved_target_uid = str(target_uid or "").strip()
+        if resolved_target_uid and resolved_target_uid != self.OWNER_UID:
+            return ""
+        if not self._cfg_bool("prompt_overlay.owner_private_enabled", False):
+            return ""
+        overlay_text = self._cfg_str("prompt_overlay.owner_private_text", "").strip()
+        if not overlay_text:
+            return ""
+        updated_at = self._cfg_str("prompt_overlay.owner_private_updated_at", "").strip()
+        updated_by = self._cfg_str("prompt_overlay.owner_private_updated_by", "").strip()
+        meta_bits: list[str] = []
+        if updated_at:
+            meta_bits.append(f"updated_at={updated_at}")
+        if updated_by:
+            meta_bits.append(f"updated_by={updated_by}")
+        meta_line = f"\nmeta: {'; '.join(meta_bits)}" if meta_bits else ""
+        return f"[PromptOverlay/OwnerPrivate]{meta_line}\n以下内容是 owner 私聊专用增量指令，只在当前 owner 私聊生效；它用于追加/覆盖表达策略，不改变权限边界、鉴权或工具安全约束。\n{overlay_text}"
 
     def _build_owner_cold_backup_context_line(self, current_text: str | None = None) -> str:
         if self._is_explicit_sensitive_detail_request(current_text):

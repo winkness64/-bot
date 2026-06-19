@@ -74,7 +74,7 @@ _CONFIRMATION_PREFIXES = (
     "存好了",
     "好，记下来了",
     "好,记下来了",
-    "阿漂，是要记录为",
+    "漂♂总，是要记录为",
 )
 
 _CONFIRMATION_WORDS = {

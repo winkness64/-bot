@@ -31,7 +31,7 @@ class DecisionEngine:
             if not msg.text and not msg.images:
                 return Decision(False, "silent", None, 0, None, "empty_message", False)
 
-            # 私聊：直接回应阿漂/用户。
+            # 私聊：直接回应漂♂总/用户。
             if msg.channel == "private":
                 return Decision(
                     should_reply=True,
@@ -43,7 +43,7 @@ class DecisionEngine:
                     is_forced=True,
                 )
 
-            # owner / 阿漂明确指令优先级最高，不受 quote 规则与普通静默影响。
+            # owner / 漂♂总明确指令优先级最高，不受 quote 规则与普通静默影响。
             if msg.owner_command or msg.explicit_command:
                 return Decision(
                     should_reply=True,

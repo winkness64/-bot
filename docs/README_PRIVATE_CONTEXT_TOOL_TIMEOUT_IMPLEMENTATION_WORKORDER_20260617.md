@@ -47,7 +47,7 @@
 
 观察到：
 - 当前有 `OwnerActionContext.summary` 和 `reason`；
-- `build_owner_action_context_prompt()` 里仍存在“阿漂指令上下文”字样；
+- `build_owner_action_context_prompt()` 里仍存在“漂♂总指令上下文”字样；
 - 当前更偏一次性 recent message 抽取，不是面向“多轮任务锚点常驻”。
 
 ### 2.4 运行时配置默认值
@@ -262,7 +262,7 @@
 
 ### A4-1. 先修旧残留
 `build_owner_action_context_prompt()` 中当前文案含：
-- `阿漂指令上下文：...`
+- `漂♂总指令上下文：...`
 
 建议改为：
 - `漂♂总指令上下文：...`

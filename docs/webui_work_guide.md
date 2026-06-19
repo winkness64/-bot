@@ -13,7 +13,7 @@
 
 以后 UI 参考优先级：
 
-1. 阿漂截图反馈。
+1. 漂♂总截图反馈。
 2. 当前生产页面截图。
 3. Nekro Agent 浅粉后台风。
 4. 黑奴扒源码结果。
@@ -63,7 +63,7 @@
 
 禁止事项：
 
-- 禁止新增 `POST / PUT / DELETE / PATCH`，除非阿漂明确把 WebUI 从只读升级为操作台。
+- 禁止新增 `POST / PUT / DELETE / PATCH`，除非漂♂总明确把 WebUI 从只读升级为操作台。
 - 禁止直接在前端写 runtime config。
 - 禁止在 UI 中展示真实 token、api_key、secret、password、base_url 明文。
 - 禁止请求 `/root`、`/opt`、`/mnt/warehouse` 等宿主路径。
@@ -118,7 +118,7 @@ python3 -m py_compile src/plugins/yangyang/webui/web_api.py src/plugins/yangyang
 
 推荐流程：
 
-1. 阿漂给截图或口头风格目标。
+1. 漂♂总给截图或口头风格目标。
 2. 主会话直接手工改一版。
 3. 截图反馈后继续微调。
 4. 黑奴只做安全验尸和 checklist。
@@ -151,7 +151,7 @@ cp src/plugins/yangyang/webui/web_ui.html \
 
 优先级从高到低：
 
-1. 根据阿漂截图继续调卡片高度、间距、图表比例。
+1. 根据漂♂总截图继续调卡片高度、间距、图表比例。
 2. 给 tab / 按钮补 `aria-selected`、键盘焦点样式。
 3. 给图表加入更真实的横轴时间标签。
 4. 如果扒到聊天统计数据源，再做消息数、活跃频道、用户统计。

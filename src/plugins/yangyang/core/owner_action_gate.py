@@ -138,12 +138,23 @@ def _config_blocked_result(
 ) -> OwnerActionGateResult:
     execution_enabled, permission_enabled, blocked_by_config = _evaluate_execution_policy(permission, config)
 
+    if execution_enabled and permission_enabled:
+        return _make_result(
+            allowed=True,
+            mode="pending",
+            reason=f"{base_reason}:ready",
+            requires_target_group=requires_target_group,
+            requires_target_user=requires_target_user,
+            safe_to_execute=True,
+            execution_enabled=execution_enabled,
+            permission=permission,
+            blocked_by_config=False,
+        )
+
     if not execution_enabled:
         reason = f"{base_reason}:execution_disabled"
-    elif not permission_enabled:
-        reason = f"{base_reason}:permission_denied:{permission}"
     else:
-        reason = f"{base_reason}:dry_run_only"
+        reason = f"{base_reason}:permission_denied:{permission}"
 
     return _make_result(
         allowed=True,

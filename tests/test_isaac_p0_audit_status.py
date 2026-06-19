@@ -49,7 +49,7 @@ class DummyMessage:
     uid: str = "335059272"
     group_id: str = ""
     msg_id: str = "dummy-msg"
-    nick: str = "阿漂"
+    nick: str = "漂♂总"
     is_at_bot: bool = False
     owner_command: bool = False
     explicit_command: bool = False

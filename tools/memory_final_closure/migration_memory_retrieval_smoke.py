@@ -45,8 +45,8 @@ class QuerySpec:
 
 QUERY_SPECS: tuple[QuerySpec, ...] = (
     QuerySpec(
-        query="阿漂喜欢什么聊天风格？",
-        terms=("阿漂", "聊天", "风格", "活人感", "模板化", "私聊", "温软", "老朋友", "啰嗦", "浪费", "token"),
+        query="漂♂总喜欢什么聊天风格？",
+        terms=("漂♂总", "聊天", "风格", "活人感", "模板化", "私聊", "温软", "老朋友", "啰嗦", "浪费", "token"),
         expected_groups=(
             ExpectedGroup("喜欢活人感", ("活人感", "像老朋友", "温软")),
             ExpectedGroup("讨厌模板化", ("模板化", "复读", "机械客服")),

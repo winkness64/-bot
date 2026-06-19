@@ -21,7 +21,7 @@ def make_group_event(*, user_id: str, text: str, message=None, raw_message: str 
         message_id=f"msg-{abs(hash((user_id, text, raw_message))) % 100000}",
         message=message if message is not None else [Seg("text", text=text)],
         raw_message=raw_message if raw_message is not None else text,
-        sender=FakeSenderInfo("阿漂" if user_id == OWNER_UID else "普通群友"),
+        sender=FakeSenderInfo("漂♂总" if user_id == OWNER_UID else "普通群友"),
         group_id=GROUP_ID,
     )
 

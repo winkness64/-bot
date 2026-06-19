@@ -88,7 +88,7 @@ def test_plugin_owner_private_toolbox_status_replies_current_session() -> None:
             message_id="toolbox-owner-1",
             message=[Seg("text", text="工具箱 status")],
             raw_message="工具箱 status",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
 
         await plugin.handle_message(bot, event)
@@ -146,7 +146,7 @@ def test_plugin_owner_group_toolbox_is_not_visible() -> None:
             message_id="toolbox-group-1",
             message=[Seg("text", text="工具箱 status")],
             raw_message="工具箱 status",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
             group_id="137918147",
         )
 

@@ -18,7 +18,7 @@ def main() -> int:
     ap.add_argument("--memory-root", default="src/plugins/yangyang/data/memory")
     ap.add_argument("--index", default="src/plugins/yangyang/data/memory/long_term/embeddings_embo01.jsonl")
     ap.add_argument("--base-url", default="http://127.0.0.1:18001/v1/embeddings")
-    ap.add_argument("--query", default="阿漂说加班时什么时候问结束")
+    ap.add_argument("--query", default="漂♂总说加班时什么时候问结束")
     ap.add_argument("--rebuild", action="store_true")
     ap.add_argument("--top-k", type=int, default=5)
     args = ap.parse_args()

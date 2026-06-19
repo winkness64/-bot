@@ -62,7 +62,7 @@ def test_candidate_jsonl_roundtrip_and_basic_fields() -> None:
             kind="preference",
             slot="favorite_color",
             value="靛蓝色",
-            summary="阿漂说自己最喜欢的颜色是靛蓝色。",
+            summary="漂♂总说自己最喜欢的颜色是靛蓝色。",
             evidence=_evidence(),
             confidence=0.68,
             support_count=1,
@@ -100,7 +100,7 @@ def test_long_term_jsonl_roundtrip_and_scope_isolation() -> None:
             kind="preference",
             slot="favorite_food",
             value="巧克力新地",
-            summary="阿漂喜欢吃巧克力新地。",
+            summary="漂♂总喜欢吃巧克力新地。",
             evidence=_evidence(),
             confidence=0.82,
             support_count=2,
@@ -386,7 +386,7 @@ def _entry(
     kind: str = "preference",
     slot: str = "favorite_food",
     value: str = "巧克力新地",
-    summary: str = "阿漂喜欢吃巧克力新地。",
+    summary: str = "漂♂总喜欢吃巧克力新地。",
     scope: str = "private_user",
     scope_id: str = "335059272",
     confidence: float = 0.8,
@@ -534,8 +534,8 @@ def test_retrieve_top_k_limits_results() -> None:
 def test_retrieve_keyword_match_scores_higher() -> None:
     """关键词匹配的条目打分更高。"""
     entries = [
-        _entry(entry_id="match", scope="private_user", scope_id="335059272", value="巧克力新地", summary="阿漂喜欢巧克力新地"),
-        _entry(entry_id="no_match", scope="private_user", scope_id="335059272", value="火锅", summary="阿漂喜欢火锅"),
+        _entry(entry_id="match", scope="private_user", scope_id="335059272", value="巧克力新地", summary="漂♂总喜欢巧克力新地"),
+        _entry(entry_id="no_match", scope="private_user", scope_id="335059272", value="火锅", summary="漂♂总喜欢火锅"),
     ]
     result = RETRIEVER.retrieve(entries, query="巧克力", user_id="335059272", group_id="", top_k=2)
     assert result[0].id == "match"
@@ -582,7 +582,7 @@ def test_render_empty_entries() -> None:
 def test_render_prompt_section_basic() -> None:
     """正常渲染 prompt 小节。"""
     entries = [
-        _entry(entry_id="1", scope="private_user", scope_id="335059272", summary="阿漂喜欢吃巧克力新地。", tags=["preference", "food"]),
+        _entry(entry_id="1", scope="private_user", scope_id="335059272", summary="漂♂总喜欢吃巧克力新地。", tags=["preference", "food"]),
     ]
     prompt = RETRIEVER.render_prompt_section(entries, char_budget=240)
     assert "[来自长期记忆的事实]" in prompt
@@ -664,7 +664,7 @@ def _store_with_retrieval(
         kind="preference",
         slot="favorite_food",
         value="巧克力新地",
-        summary="阿漂喜欢吃巧克力新地。",
+        summary="漂♂总喜欢吃巧克力新地。",
         evidence=[],
         confidence=0.8,
         support_count=2,
@@ -890,7 +890,7 @@ def test_pipeline_run_once_promotes_aggregated_preference_from_short_term() -> N
         store.add_to_short_term(session_id, {
             "uid": "335059272",
             "user_id": "335059272",
-            "nick": "阿漂",
+            "nick": "漂♂总",
             "text": "我最喜欢脉动",
             "timestamp": 1717400001.0,
             "channel": "private",
@@ -900,7 +900,7 @@ def test_pipeline_run_once_promotes_aggregated_preference_from_short_term() -> N
         store.add_to_short_term(session_id, {
             "uid": "335059272",
             "user_id": "335059272",
-            "nick": "阿漂",
+            "nick": "漂♂总",
             "text": "我喜欢脉动",
             "timestamp": 1717400002.0,
             "channel": "private",
@@ -938,7 +938,7 @@ def test_pipeline_run_once_promotes_activity_preference_from_short_term() -> Non
         store.add_to_short_term(session_id, {
             "uid": "335059272",
             "user_id": "335059272",
-            "nick": "阿漂",
+            "nick": "漂♂总",
             "text": "我晚上一般喜欢打鸣潮",
             "timestamp": 1717400101.0,
             "channel": "private",
@@ -948,7 +948,7 @@ def test_pipeline_run_once_promotes_activity_preference_from_short_term() -> Non
         store.add_to_short_term(session_id, {
             "uid": "335059272",
             "user_id": "335059272",
-            "nick": "阿漂",
+            "nick": "漂♂总",
             "text": "我晚上最喜欢打鸣潮",
             "timestamp": 1717400102.0,
             "channel": "private",
@@ -981,7 +981,7 @@ def test_pipeline_question_messages_are_not_promoted_or_persisted() -> None:
             store.add_to_short_term(session_id, {
                 "uid": "335059272",
                 "user_id": "335059272",
-                "nick": "阿漂",
+                "nick": "漂♂总",
                 "text": text,
                 "timestamp": 1717400200.0 + idx,
                 "channel": "private",
@@ -1008,7 +1008,7 @@ def test_pipeline_processed_short_term_messages_are_not_repromoted() -> None:
         store.add_to_short_term(session_id, {
             "uid": "335059272",
             "user_id": "335059272",
-            "nick": "阿漂",
+            "nick": "漂♂总",
             "text": "我晚上一般喜欢打绝区零",
             "timestamp": 1717400301.0,
             "channel": "private",
@@ -1018,7 +1018,7 @@ def test_pipeline_processed_short_term_messages_are_not_repromoted() -> None:
         store.add_to_short_term(session_id, {
             "uid": "335059272",
             "user_id": "335059272",
-            "nick": "阿漂",
+            "nick": "漂♂总",
             "text": "我晚上最喜欢打绝区零",
             "timestamp": 1717400302.0,
             "channel": "private",

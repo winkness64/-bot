@@ -66,7 +66,30 @@ class OpenAICompatibleProvider(ModelProvider):
                     if raw_tool_calls is None and isinstance(delta, dict):
                         raw_tool_calls = delta.get("tool_calls")
                     if raw_tool_calls:
-                        tool_calls.extend(_normalize_tool_calls(raw_tool_calls))
+                        for tc_delta in raw_tool_calls:
+                            tc_idx = getattr(tc_delta, "index", None)
+                            if tc_idx is None and isinstance(tc_delta, dict):
+                                tc_idx = tc_delta.get("index")
+                            if tc_idx is None:
+                                tc_idx = 0
+                            while len(tool_calls) <= tc_idx:
+                                tool_calls.append({"id": "", "type": "function", "function": {"name": "", "arguments": ""}})
+                            entry = tool_calls[tc_idx]
+                            tid = getattr(tc_delta, "id", None) or (tc_delta.get("id") if isinstance(tc_delta, dict) else "")
+                            if tid:
+                                entry["id"] = str(tid)
+                            ttype = getattr(tc_delta, "type", None) or (tc_delta.get("type") if isinstance(tc_delta, dict) else "")
+                            if ttype:
+                                entry["type"] = str(ttype)
+                            tfunc = getattr(tc_delta, "function", None) or (tc_delta.get("function") if isinstance(tc_delta, dict) else None)
+                            if tfunc is not None:
+                                fname = getattr(tfunc, "name", None) or (tfunc.get("name") if isinstance(tfunc, dict) else "")
+                                if fname:
+                                    entry.setdefault("function", {})["name"] = str(fname)
+                                fargs = getattr(tfunc, "arguments", None) or (tfunc.get("arguments") if isinstance(tfunc, dict) else "")
+                                if fargs:
+                                    current_args = entry.get("function", {}).get("arguments", "")
+                                    entry.setdefault("function", {})["arguments"] = str(current_args) + str(fargs)
                 usage = getattr(chunk, "usage", None)
                 if usage is not None:
                     usage_obj = usage

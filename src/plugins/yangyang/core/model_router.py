@@ -22,6 +22,7 @@ from .model_profile_switcher import (
     choose_profile_for_channel,
     get_model_profile_descriptor,
     iter_profile_ids,
+    profile_enabled,
     refresh_model_profiles_from_models,
     validate_model_profile_enabled,
 )
@@ -109,6 +110,7 @@ class ModelRouter:
         self.last_call_timeout_seconds: float = 0.0
         self.last_call_interaction_phase: str = ""
         self.last_call_streaming_enabled: bool = False
+        self.last_call_attempt_trace: list[dict[str, Any]] = []
 
     def _cfg_get(self, path: str, default: Any = None) -> Any:
         try:
@@ -215,6 +217,54 @@ class ModelRouter:
         fallback_cooldown = self.TIERS.get(tier, {}).get("cooldown_on_fail", 60)
         return float(self._cfg_get(f"providers.{tier}.cooldown_on_fail", fallback_cooldown))
 
+    def _tier_cooldown_for_reason(self, tier: str, reason: str) -> float:
+        base = max(0.0, float(self._tier_cooldown_on_fail(tier)))
+        blob = str(reason or "").strip().lower()
+        if not blob:
+            return base
+
+        short_markers = (
+            "timeout",
+            "timedout",
+            "upstream_timeout",
+            "apiconnectionerror",
+            "apiconnection",
+            "connectionerror",
+            "connecterror",
+            "remotedisconnected",
+            "serviceunavailable",
+            "temporar",
+            "502",
+            "503",
+            "504",
+            "429",
+            "provider_unavailable",
+            "rate_limited",
+            "upstream_error",
+            "request_failed",
+        )
+        long_markers = (
+            "auth_failed",
+            "model_not_found",
+            "missing_api_key",
+            "missing_base_url_env",
+            "missing openai_api_key",
+            "profile_not_found",
+            "profile_disabled",
+        )
+        sensitive_markers = (
+            "sensitive_words_detected",
+            "content_filter",
+        )
+
+        if any(m in blob for m in long_markers):
+            return base
+        if any(m in blob for m in sensitive_markers):
+            return min(base, 15.0)
+        if any(m in blob for m in short_markers):
+            return min(base, 10.0)
+        return min(base, 30.0)
+
     def _is_available(self, model: str) -> bool:
         return time.time() >= self.fail_until.get(model, 0.0)
 
@@ -252,6 +302,32 @@ class ModelRouter:
             if pid and pid != resolved_tier and pid not in out:
                 out.append(pid)
         return out
+
+    def _expanded_fallback_candidates(self, *, requested_tier: str, resolved_tier: str, resolved_channel: str) -> list[str]:
+        candidate_order: list[str] = [resolved_tier]
+        for configured_fallback in self._configured_fallback_profiles(
+            requested_tier=requested_tier,
+            resolved_tier=resolved_tier,
+            resolved_channel=resolved_channel,
+        ):
+            if configured_fallback and configured_fallback not in candidate_order:
+                candidate_order.append(configured_fallback)
+
+        for profile_id in iter_profile_ids(self.runtime_cfg):
+            pid = str(profile_id or "").strip()
+            if not pid or pid in candidate_order or pid == resolved_tier:
+                continue
+            if not profile_enabled(self.runtime_cfg, pid):
+                continue
+            candidate_order.append(pid)
+        return candidate_order
+
+    def _availability_key(self, profile_id: str) -> str:
+        descriptor = get_model_profile_descriptor(self.runtime_cfg, profile_id)
+        provider = str(descriptor.get("provider") or self._provider_name(profile_id) or "")
+        model = str(descriptor.get("model") or self._model_name(profile_id) or profile_id)
+        pid = str(profile_id or "").strip()
+        return f"{provider}:{pid}:{model}"
 
     def _is_retryable_fallback_reason(self, reason: str, exc: Exception | None = None) -> bool:
         blob = str(reason or "").strip().lower()
@@ -308,6 +384,22 @@ class ModelRouter:
             "resolved_profile": str(self.last_call_resolved_profile or ""),
             "channel_scope": str(self.last_call_channel_scope or ""),
         }
+
+    def _record_attempt_trace(self, *, profile: str, model: str = "", provider: str = "", status: str, reason: str = "", availability_key: str = "", skipped: bool = False) -> None:
+        event = {
+            "profile": str(profile or ""),
+            "model": str(model or ""),
+            "provider": str(provider or ""),
+            "status": str(status or ""),
+            "reason": str(reason or ""),
+            "availability_key": str(availability_key or ""),
+            "skipped": bool(skipped),
+            "at": time.time(),
+            "request_id": str(self.last_call_request_id or ""),
+        }
+        self.last_call_attempt_trace.append(event)
+        if len(self.last_call_attempt_trace) > 24:
+            self.last_call_attempt_trace = self.last_call_attempt_trace[-24:]
 
     def _fallback_observability(self) -> dict[str, Any]:
         return {
@@ -387,20 +479,39 @@ class ModelRouter:
             return "content_filter"
         return ""
 
-    def _build_safe_fallback_messages(self, messages: list[dict[str, Any]], error_type: str) -> list[dict[str, Any]]:
-        """构造脱敏 fallback messages：只保留角色、长度、轮次数，不带原文。"""
+    def _extract_session_anchor_hint(self, messages: list[dict[str, Any]]) -> str:
+        for item in messages or []:
+            if str(item.get("role", "")).strip() != "system":
+                continue
+            content = str(item.get("content", "") or "")
+            if "[SessionAnchor]" not in content:
+                continue
+            return content[:400]
+        return ""
+
+    def _build_safe_fallback_messages(
+        self,
+        messages: list[dict[str, Any]],
+        error_type: str,
+        session_anchor_hint: str = "",
+    ) -> list[dict[str, Any]]:
+        """构造脱敏 fallback messages：只保留最小统计和任务锚点，不带原文。"""
         role_counts: dict[str, int] = {}
         total_len = 0
         for item in messages or []:
             role = str(item.get("role", "unknown"))[:24]
             role_counts[role] = role_counts.get(role, 0) + 1
             total_len += len(str(item.get("content", "")))
+        safe_anchor = str(session_anchor_hint or "").strip()
+        if len(safe_anchor) > 400:
+            safe_anchor = safe_anchor[:399] + "…"
         return [
             {
                 "role": "system",
                 "content": (
                     "你是安全改写 fallback。上游请求触发内容安全保险丝；"
                     "不要复述、猜测或还原原始内容，只给出简短、合规、可继续对话的回复。"
+                    "若提供了会话任务锚点，只能用它维持任务连续性，不得脑补原文。"
                 ),
             },
             {
@@ -408,6 +519,7 @@ class ModelRouter:
                 "content": (
                     f"原始消息已脱敏丢弃。error_type={error_type}; "
                     f"message_count={len(messages or [])}; total_length={total_len}; roles={role_counts}. "
+                    f"session_anchor_hint={safe_anchor or '-'}。"
                     "请用自然中文说明可以改为安全摘要、改写或继续提供下一步帮助。"
                 ),
             },
@@ -700,6 +812,7 @@ class ModelRouter:
         self.last_call_fallback_from = ""
         self.last_call_fallback_to = ""
         self.last_call_fallback_reason = ""
+        self.last_call_attempt_trace = []
         self.last_call_timeout_bucket = self._resolve_timeout_bucket(timeout_bucket)
         self.last_call_timeout_seconds = 0.0
         self.last_call_interaction_phase = str(interaction_phase or "")
@@ -725,24 +838,27 @@ class ModelRouter:
             logger.info("ModelRouter: dry_run enabled, skip real model call request_id=%s", self.last_call_request_id)
             return self.DRY_RUN_TEXT, "dry_run"
 
-        configured_fallbacks = self._configured_fallback_profiles(requested_tier=requested_tier, resolved_tier=tier, resolved_channel=resolved_channel)
-        candidate_order: list[str] = [tier]
-        for configured_fallback in configured_fallbacks:
-            if configured_fallback and configured_fallback not in candidate_order:
-                candidate_order.append(configured_fallback)
+        candidate_order = self._expanded_fallback_candidates(
+            requested_tier=requested_tier,
+            resolved_tier=tier,
+            resolved_channel=resolved_channel,
+        )
         last_error_type = "unknown"
         attempted_primary = False
 
         for cur_tier in candidate_order:
             if not attempted_primary:
                 attempted_primary = True
-            elif not self._is_retryable_fallback_reason(last_error_type):
-                continue
+            elif safe_messages is None and not self._is_retryable_fallback_reason(last_error_type):
+                break
             if not self._tier_enabled(cur_tier):
+                self._record_attempt_trace(profile=cur_tier, status="skipped", reason="profile_disabled", skipped=True)
                 continue
 
             model = self._model_name(cur_tier)
-            if not self._is_available(model):
+            availability_key = self._availability_key(cur_tier)
+            if not self._is_available(availability_key):
+                self._record_attempt_trace(profile=cur_tier, model=model, status="skipped", reason="cooldown_active", availability_key=availability_key, skipped=True)
                 continue
 
             active_messages = safe_messages if safe_messages is not None else messages
@@ -751,6 +867,7 @@ class ModelRouter:
                 provider = self.providers.get(provider_name)
                 if provider is None or not provider.is_available:
                     last_error_type = f"provider_unavailable:{provider_name}"
+                    self._record_attempt_trace(profile=cur_tier, model=model, provider=provider_name, status="failed", reason=last_error_type, availability_key=availability_key)
                     logger.warning(
                         "ModelRouter: provider unavailable request_id=%s session=%s hash=%s length=%s tier=%s provider=%s error_type=%s",
                         self.last_call_request_id,
@@ -788,6 +905,7 @@ class ModelRouter:
                 except Exception:
                     pass
                 response = await provider.complete(**complete_kwargs)
+                self._record_attempt_trace(profile=cur_tier, model=model, provider=provider_name, status="ok", reason="success", availability_key=availability_key)
                 self.last_call_tool_calls = self._normalize_tool_calls(getattr(response, "tool_calls", []))
                 try:
                     append_token_usage_event(
@@ -808,6 +926,7 @@ class ModelRouter:
                 return str(response.content).strip(), cur_tier
             except asyncio.TimeoutError:
                 last_error_type = "timeout"
+                self._record_attempt_trace(profile=cur_tier, model=model, provider=provider_name if 'provider_name' in locals() else "", status="failed", reason=last_error_type, availability_key=availability_key)
                 logger.warning(
                     "ModelRouter: model timeout request_id=%s session=%s hash=%s length=%s tier=%s error_type=%s",
                     self.last_call_request_id,
@@ -817,7 +936,7 @@ class ModelRouter:
                     cur_tier,
                     last_error_type,
                 )
-                self._mark_fail(model, self._tier_cooldown_on_fail(cur_tier))
+                self._mark_fail(availability_key, self._tier_cooldown_for_reason(cur_tier, last_error_type))
             except Exception as exc:
                 sensitive_type = self._detect_sensitive_error_type(exc)
                 if sensitive_type:
@@ -826,6 +945,7 @@ class ModelRouter:
                     last_error_type = sensitive_type
                     if safe_messages is None:
                         safe_messages = self._build_safe_fallback_messages(messages, sensitive_type)
+                    self._record_attempt_trace(profile=cur_tier, model=model, provider=provider_name if 'provider_name' in locals() else "", status="failed", reason=sensitive_type, availability_key=availability_key)
                     logger.warning(
                         "ModelRouter: sensitive failure request_id=%s session=%s hash=%s length=%s tier=%s error_type=%s",
                         self.last_call_request_id,
@@ -835,7 +955,7 @@ class ModelRouter:
                         cur_tier,
                         sensitive_type,
                     )
-                    self._mark_fail(model, self._tier_cooldown_on_fail(cur_tier))
+                    self._mark_fail(availability_key, self._tier_cooldown_for_reason(cur_tier, last_error_type))
                     continue
 
                 detected_error = self._detect_sensitive_error_type(exc)
@@ -844,6 +964,7 @@ class ModelRouter:
                 if exc_text:
                     last_error_type = f"{last_error_type}:{exc_text}" if last_error_type else exc_text
                 self.last_call_error_type = str(last_error_type or "")
+                self._record_attempt_trace(profile=cur_tier, model=model, provider=provider_name if 'provider_name' in locals() else "", status="failed", reason=self.last_call_error_type, availability_key=availability_key)
                 logger.warning(
                     "ModelRouter: model call failed request_id=%s session=%s hash=%s length=%s tier=%s error_type=%s",
                     self.last_call_request_id,
@@ -853,7 +974,7 @@ class ModelRouter:
                     cur_tier,
                     self.last_call_error_type,
                 )
-                self._mark_fail(model, self._tier_cooldown_on_fail(cur_tier) * 2)
+                self._mark_fail(availability_key, self._tier_cooldown_for_reason(cur_tier, last_error_type))
 
         logger.warning(
             "ModelRouter: all tiers exhausted, returning local safe template request_id=%s session=%s hash=%s length=%s error_type=%s",

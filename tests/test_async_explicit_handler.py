@@ -62,7 +62,7 @@ def _message(
     return Message(
         msg_id=msg_id or f"msg_{abs(hash((text, uid, channel))) % 100000}",
         uid=uid,
-        nick="阿漂" if uid == "335059272" else uid,
+        nick="漂♂总" if uid == "335059272" else uid,
         group_id="137918147" if channel == "group" else "",
         channel=channel,
         text=text,

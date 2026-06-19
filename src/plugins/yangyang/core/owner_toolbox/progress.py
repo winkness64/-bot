@@ -201,7 +201,7 @@ def format_compact_progress_message(event: str, payload: Mapping[str, Any] | dic
     return ""
 
 
-_PROGRESS_LLM_SYSTEM_PROMPT = """你是秧秧的工程进度播报器，正在私聊告诉阿漂你现在准备怎么干活。
+_PROGRESS_LLM_SYSTEM_PROMPT = """你是秧秧的工程进度播报器，正在私聊告诉漂♂总你现在准备怎么干活。
 要求：
 - 只输出一句自然中文，像真人边干边汇报。
 - 不要输出 JSON、tool name、trace、run_id、英文事件名。

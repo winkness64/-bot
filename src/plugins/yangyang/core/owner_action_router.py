@@ -37,6 +37,18 @@ REPLY_CURRENT_KEYWORDS: tuple[str, ...] = (
     "看一下",
     "cue",
 )
+NATURAL_CONTINUATION_KEYWORDS: tuple[str, ...] = (
+    "继续",
+    "继续搞",
+    "继续吧",
+    "继续做",
+    "搞吧",
+    "你搞",
+    "你搞啊",
+    "开搞",
+    "干吧",
+    "做吧",
+)
 CANCEL_KEYWORDS: tuple[str, ...] = (
     "别回",
     "别回了",
@@ -187,6 +199,16 @@ def _has_explicit_owner_command_signal(message: Any, normalized_text: str) -> tu
     return False, "no_explicit_signal"
 
 
+def _is_owner_private_followup_message(message: Any, normalized_text: str) -> bool:
+    if not bool(getattr(message, "is_owner", False)):
+        return False
+    if str(getattr(message, "channel", "") or "").strip().lower() != "private":
+        return False
+    if len(normalized_text) > 24:
+        return False
+    return _contains_any(normalized_text, NATURAL_CONTINUATION_KEYWORDS)
+
+
 def parse_owner_action(message: Any, config: Any) -> OwnerAction | None:
     """只解析 owner 指令，不做执行。"""
     if message is None:
@@ -208,8 +230,11 @@ def parse_owner_action(message: Any, config: Any) -> OwnerAction | None:
         return None
 
     has_explicit_signal, explicit_reason = _has_explicit_owner_command_signal(message, normalized)
-    if not has_explicit_signal:
+    natural_followup = _is_owner_private_followup_message(message, normalized)
+    if not has_explicit_signal and not natural_followup:
         return None
+    if natural_followup and not has_explicit_signal:
+        explicit_reason = "owner_private_followup"
 
     style, style_reason, style_confidence = _infer_style(normalized)
     target_group_id = str(getattr(message, "group_id", "") or "") or None
@@ -260,6 +285,17 @@ def parse_owner_action(message: Any, config: Any) -> OwnerAction | None:
             raw_text=raw_text,
             reason=f"{explicit_reason}+matched_reply_current_keyword+{target_user_reason}+{style_reason}",
             confidence=max(0.82, style_confidence),
+        )
+
+    if natural_followup:
+        return OwnerAction(
+            action_type="reply_current",
+            style=style,
+            target_group_id=target_group_id,
+            target_user_id=target_user_id,
+            raw_text=raw_text,
+            reason=f"{explicit_reason}+matched_natural_followup+{target_user_reason}+{style_reason}",
+            confidence=max(0.84, style_confidence),
         )
 
     if style != "normal":

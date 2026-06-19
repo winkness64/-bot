@@ -192,21 +192,21 @@ async def _handle_natural_memory_request_async(
         logger.exception("ExplicitMemoryHandler: natural memory LLM decision failed")
         return ExplicitMemoryHandleResult(
             True,
-            reply="阿漂，这句像是自然语言记忆请求，但判定模型失败；我没有写入，也不会假装记好了。要强制规则写入请用 `/记一下 内容`。",
+            reply="漂♂总，这句像是自然语言记忆请求，但判定模型失败；我没有写入，也不会假装记好了。要强制规则写入请用 `/记一下 内容`。",
             action="natural_llm_error",
         )
     data = _extract_json_object(raw)
     if not data or not bool(data.get("should_write")):
         return ExplicitMemoryHandleResult(
             True,
-            reply="阿漂，我判断这句不该写入长期记忆；当前未写入。要强制规则写入请用 `/记一下 内容`。",
+            reply="漂♂总，我判断这句不该写入长期记忆；当前未写入。要强制规则写入请用 `/记一下 内容`。",
             action="natural_llm_no_write",
         )
     payload = str(data.get("payload") or "").strip()
     if not payload:
         return ExplicitMemoryHandleResult(
             True,
-            reply="阿漂，判定模型没有给出可写入内容；当前未写入，也不会假装记好了。",
+            reply="漂♂总，判定模型没有给出可写入内容；当前未写入，也不会假装记好了。",
             action="natural_llm_empty_payload",
         )
     needs_confirmation = bool(data.get("needs_confirmation", True))
@@ -229,7 +229,7 @@ async def _handle_natural_memory_request_async(
         )
         return ExplicitMemoryHandleResult(
             True,
-            reply=f"阿漂，我理解成这条记忆：“{payload}”。确认写入吗？",
+            reply=f"漂♂总，我理解成这条记忆：“{payload}”。确认写入吗？",
             action="natural_llm_pending_confirmation",
             intent=intent,
         )
@@ -247,7 +247,7 @@ async def _handle_natural_memory_request_async(
     _PENDING_EXPLICIT_MEMORY.pop(key, None)
     return ExplicitMemoryHandleResult(
         True,
-        reply=f"记好了，阿漂。entry_id={entry_id}",
+        reply=f"记好了，漂♂总。entry_id={entry_id}",
         action="natural_llm_direct_write",
         intent=intent,
         entry_id=entry_id,
@@ -384,7 +384,7 @@ def _handle_contextual_write(
             )
             return ExplicitMemoryHandleResult(
                 True,
-                reply=f"阿漂，是要记录为：“{payload}” 吗？",
+                reply=f"漂♂总，是要记录为：“{payload}” 吗？",
                 action="pending_topic_boundary_confirmation",
                 intent=intent,
             )
@@ -398,13 +398,13 @@ def _handle_contextual_write(
             if topic_status == "ambiguous":
                 return ExplicitMemoryHandleResult(
                     True,
-                    reply="阿漂，我看到刚才可能有不止一段话题。你把要记的那段内容再点明一下？",
+                    reply="漂♂总，我看到刚才可能有不止一段话题。你把要记的那段内容再点明一下？",
                     action="topic_boundary_ambiguous",
                     intent=intent,
                 )
             return ExplicitMemoryHandleResult(
                 True,
-                reply="阿漂，我没抓准你说的“刚才/那个”是哪段，要不你把要记的内容再说清楚一点？",
+                reply="漂♂总，我没抓准你说的“刚才/那个”是哪段，要不你把要记的内容再说清楚一点？",
                 action="context_insufficient",
                 intent=intent,
             )
@@ -444,7 +444,7 @@ def _handle_contextual_write(
         )
         return ExplicitMemoryHandleResult(
             True,
-            reply=f"阿漂，是要记录为：“{payload}” 吗？",
+            reply=f"漂♂总，是要记录为：“{payload}” 吗？",
             action="pending_context_confirmation",
             intent=intent,
         )
@@ -457,7 +457,7 @@ def _handle_contextual_write(
     )
     return ExplicitMemoryHandleResult(
         True,
-        reply="阿漂，我没抓准你说的“刚才/那个”是哪段，要不你把要记的内容再说清楚一点？",
+        reply="漂♂总，我没抓准你说的“刚才/那个”是哪段，要不你把要记的内容再说清楚一点？",
         action="context_insufficient",
         intent=intent,
     )
@@ -528,7 +528,7 @@ async def _handle_contextual_write_async(
         )
         return ExplicitMemoryHandleResult(
             True,
-            reply=f"阿漂，是要记录为：“{payload}” 吗？",
+            reply=f"漂♂总，是要记录为：“{payload}” 吗？",
             action="pending_topic_boundary_confirmation",
             intent=intent,
         )
@@ -542,13 +542,13 @@ async def _handle_contextual_write_async(
         if topic_status == "ambiguous":
             return ExplicitMemoryHandleResult(
                 True,
-                reply="阿漂，我看到刚才可能有不止一段话题。你把要记的那段内容再点明一下？",
+                reply="漂♂总，我看到刚才可能有不止一段话题。你把要记的那段内容再点明一下？",
                 action="topic_boundary_ambiguous",
                 intent=intent,
             )
         return ExplicitMemoryHandleResult(
             True,
-            reply="阿漂，我没抓准你说的“刚才/那个”是哪段，要不你把要记的内容再说清楚一点？",
+            reply="漂♂总，我没抓准你说的“刚才/那个”是哪段，要不你把要记的内容再说清楚一点？",
             action="context_insufficient",
             intent=intent,
         )
@@ -601,7 +601,7 @@ def handle_explicit_memory_message(
             if compact in _CONFIRM_REPLIES or compact in _CANCEL_REPLIES:
                 return ExplicitMemoryHandleResult(
                     True,
-                    reply="刚才那条确认已经过期啦，阿漂要记的话再说一遍。",
+                    reply="刚才那条确认已经过期啦，漂♂总要记的话再说一遍。",
                     action="pending_expired",
                 )
             pending = None
@@ -621,7 +621,7 @@ def handle_explicit_memory_message(
             source="explicit_context_resolved" if contextual else (pending.source or None),
         )
         if not entry_id:
-            return ExplicitMemoryHandleResult(True, reply="阿漂，这条没有真实写入成功，我不会假装已经记好。", action="confirmed_write_failed", intent=intent)
+            return ExplicitMemoryHandleResult(True, reply="漂♂总，这条没有真实写入成功，我不会假装已经记好。", action="confirmed_write_failed", intent=intent)
         _PENDING_EXPLICIT_MEMORY.pop(key, None)
         logger.info(
             f"ExplicitMemoryHandler: confirmed user_id={uid} session_id={sid} "
@@ -671,12 +671,12 @@ def handle_explicit_memory_message(
             confirmed=False,
         )
         if not entry_id:
-            return ExplicitMemoryHandleResult(True, reply="阿漂，这条没有真实写入成功，我不会假装已经记好。", action="direct_write_failed", intent=intent)
+            return ExplicitMemoryHandleResult(True, reply="漂♂总，这条没有真实写入成功，我不会假装已经记好。", action="direct_write_failed", intent=intent)
         _PENDING_EXPLICIT_MEMORY.pop(key, None)
         logger.info(f"ExplicitMemoryHandler: direct_write user_id={uid} session_id={sid} entry_id={entry_id}")
         return ExplicitMemoryHandleResult(
             True,
-            reply=f"记好了，阿漂。entry_id={entry_id}",
+            reply=f"记好了，漂♂总。entry_id={entry_id}",
             action="direct_write",
             intent=intent,
             entry_id=entry_id,
@@ -694,7 +694,7 @@ def handle_explicit_memory_message(
         logger.info(f"ExplicitMemoryHandler: pending user_id={uid} session_id={sid} payload_preview={payload[:40]}")
         return ExplicitMemoryHandleResult(
             True,
-            reply=f"阿漂，是要记录为：“{payload}” 吗？",
+            reply=f"漂♂总，是要记录为：“{payload}” 吗？",
             action="pending_confirmation",
             intent=intent,
         )
@@ -733,7 +733,7 @@ async def handle_explicit_memory_message_async(
         if _is_owner_private_message(msg) and _looks_like_natural_memory_request(_message_text(msg)):
             return ExplicitMemoryHandleResult(
                 True,
-                reply="阿漂，这句像是自然语言记忆请求，但记忆判定模型当前不可用；我没有写入，也不会假装记好了。要强制规则写入请用 `/记一下 内容`。",
+                reply="漂♂总，这句像是自然语言记忆请求，但记忆判定模型当前不可用；我没有写入，也不会假装记好了。要强制规则写入请用 `/记一下 内容`。",
                 action="natural_memory_router_unavailable",
             )
         return handle_explicit_memory_message(

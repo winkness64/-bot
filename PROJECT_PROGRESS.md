@@ -561,7 +561,7 @@
 补充：
 - 私聊与普通人群聊 `@bot` 仍保留强制回复规则，不会被 bot loop 防护误伤
 - 新增群聊 quote/reply 硬规则：仅引用 bot 不构成回复资格，仍需同时 `@bot`
-- owner/阿漂明确指令优先级最高，不被 quote 规则误杀
+- owner/漂♂总明确指令优先级最高，不被 quote 规则误杀
 - 已知 bot `@bot` 会优先走 bot loop 防护，避免互相点名后继续死循环
 - 新增 `known_bot_uids` 配置，允许识别本 bot 之外的其它 bot 账号
 - 新增 bot loop 配置项：`behavior.bot_loop_enabled`、`behavior.bot_loop_recent_limit`、`behavior.bot_loop_min_bot_messages`、`behavior.bot_loop_cooldown_seconds`
@@ -751,8 +751,8 @@
 已完成硬规则：
 - 空消息 / 无有效内容：安全兜底不回复
 - 私聊：直接回复
-- owner/阿漂群聊明确 @bot：允许回复
-- owner/阿漂明确命令白名单：强制放行，优先级最高
+- owner/漂♂总群聊明确 @bot：允许回复
+- owner/漂♂总明确命令白名单：强制放行，优先级最高
 - 群聊明确 @ bot：允许回复
 - 群聊 quote/reply bot：仅引用不算回复资格，仍需同时 `@bot`
 - 其它群聊：默认静默

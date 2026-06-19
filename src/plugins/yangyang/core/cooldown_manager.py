@@ -54,7 +54,7 @@ class CooldownManager:
         """
         判断当前是否允许回复。
 
-        is_forced=True 通常代表被 @ 或阿漂强制指令，直接跳过冷却与主动上限。
+        is_forced=True 通常代表被 @ 或漂♂总强制指令，直接跳过冷却与主动上限。
         """
         try:
             if is_forced:

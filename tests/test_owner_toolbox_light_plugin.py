@@ -94,7 +94,7 @@ def test_plugin_owner_private_slash_toolbox_status() -> None:
             message_id="owner-light-slash-1",
             message=[Seg("text", text="/toolbox status")],
             raw_message="/toolbox status",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
         await plugin.handle_message(bot, event)
         assert bot.group_sent == []
@@ -116,7 +116,7 @@ def test_plugin_group_slash_toolbox_not_visible() -> None:
             message_id="owner-light-group-1",
             message=[Seg("text", text="/toolbox status")],
             raw_message="/toolbox status",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
             group_id="137918147",
         )
         await plugin.handle_message(bot, event)
@@ -144,7 +144,7 @@ def test_plugin_plain_restart_chat_does_not_hit_legacy_toolbox_router(monkeypatc
             message_id="owner-light-chat-1",
             message=[Seg("text", text="我今天重启了电脑")],
             raw_message="我今天重启了电脑",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
 
         await plugin.handle_message(bot, event)
@@ -195,7 +195,7 @@ def test_plugin_owner_private_natural_language_uses_main_router_tool_loop(monkey
             message_id="owner-light-llm-main-1",
             message=[Seg("text", text="帮我看一下 tmp 目录有什么")],
             raw_message="帮我看一下 tmp 目录有什么",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
 
         await plugin.handle_message(bot, event)
@@ -232,7 +232,7 @@ def test_plugin_owner_private_no_tool_trace_does_not_fallback_to_light(monkeypat
             message_id="owner-light-no-tool-1",
             message=[Seg("text", text="我今天重启了电脑")],
             raw_message="我今天重启了电脑",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
 
         await plugin.handle_message(bot, event)
@@ -267,7 +267,7 @@ def test_plugin_owner_private_natural_query_tool_loop_max_steps_uses_native_tool
             message_id="owner-max-steps-query-1",
             message=[Seg("text", text="查一下我们工具次数")],
             raw_message="查一下我们工具次数",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
         await plugin.handle_message(bot, event)
         assert calls == [("tool_loop", [tool["name"] for tool in plugin.build_owner_toolbox_tools()])]
@@ -302,7 +302,7 @@ def test_plugin_owner_private_natural_set_tool_loop_max_steps_uses_native_tool_l
             message_id="owner-max-steps-set-1",
             message=[Seg("text", text="把工具调用上限改成 1000000")],
             raw_message="把工具调用上限改成 1000000",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
         await plugin.handle_message(bot, event)
         assert calls == ["tool_loop"]
@@ -337,7 +337,7 @@ def test_plugin_group_and_non_owner_max_steps_natural_not_handled(monkeypatch) -
             message_id="group-max-steps-1",
             message=[Seg("text", text="当前工具调用上限是多少")],
             raw_message="当前工具调用上限是多少",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
             group_id="137918147",
         )
         non_owner_event = PrivateFakeEvent(
@@ -370,7 +370,7 @@ def test_plugin_owner_toolbox_assistant_prelude_strips_role_prefix(monkeypatch) 
     async def fake_tool_loop(_tier, _messages, **kwargs):
         progress = kwargs.get("progress_callback")
         assert progress is not None
-        await progress("assistant_prelude", {"step": 1, "text": "秧秧: 好嘞阿漂，我先看看冷备目录现在有什么，再动手～", "tool_call_count": 1})
+        await progress("assistant_prelude", {"step": 1, "text": "秧秧: 好嘞漂♂总，我先看看冷备目录现在有什么，再动手～", "tool_call_count": 1})
         return "看完了，冷备目录里现在有这些。", "fake_tier", [{"tool_name": "list"}]
 
     monkeypatch.setattr(plugin.router, "call_with_tool_loop", fake_tool_loop)
@@ -384,12 +384,12 @@ def test_plugin_owner_toolbox_assistant_prelude_strips_role_prefix(monkeypatch) 
             message_id="owner-prelude-prefix-1",
             message=[Seg("text", text="看一下冷备目录")],
             raw_message="看一下冷备目录",
-            sender=FakeSenderInfo("阿漂"),
+            sender=FakeSenderInfo("漂♂总"),
         )
         await plugin.handle_message(bot, event)
         assert bot.group_sent == []
         assert bot.private_sent == [
-            (335059272, "好嘞阿漂，我先看看冷备目录现在有什么，再动手～"),
+            (335059272, "好嘞漂♂总，我先看看冷备目录现在有什么，再动手～"),
             (335059272, "看完了，冷备目录里现在有这些。"),
         ]
 

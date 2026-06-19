@@ -165,21 +165,6 @@ def _owner_tool_loop_systemd_hint(text: str) -> str:
 
 
 
-def _is_model_profile_list_request(user_text: str) -> bool:
-    text = str(user_text or "").strip().lower()
-    if not text:
-        return False
-    model_markers = (
-        "模型列表", "模型清单", "有哪些模型", "有几个模型", "显示模型", "列出模型",
-        "可用模型", "启用模型", "能用的模型", "可切模型", "可选模型", "现在能用",
-        "model list", "models",
-    )
-    refresh_markers = ("刷新", "拉取", "更新", "refresh")
-    if any(marker in text for marker in refresh_markers):
-        return False
-    return any(marker in text for marker in model_markers)
-
-
 def _wants_enabled_only_model_profile_list(user_text: str) -> bool:
     text = str(user_text or "").strip().lower()
     enabled_only_markers = ("可用模型", "启用模型", "能用的模型", "可切模型", "可选模型", "现在能用", "enabled models", "available models")
@@ -793,46 +778,6 @@ async def handle_owner_toolbox_light_llm_message(
                 context_channel=context_channel,
             )
         return execute_owner_toolbox_tool(name, argmap, config, project_root=project_root)
-
-    if _is_model_profile_list_request(clean_text):
-        context_channel = str(getattr(message, "channel", "") or "private")
-        include_disabled = _wants_full_model_profile_list(clean_text)
-        executed = execute_owner_toolbox_tool(
-            "list_model_profiles",
-            {
-                "scope": "current",
-                "include_disabled": include_disabled,
-                "_context_channel": context_channel,
-                "_raw": clean_text,
-            },
-            config,
-            project_root=project_root,
-        )
-        reply = _format_model_profile_list_from_trace(executed.data if isinstance(executed.data, dict) else {}, user_text=clean_text)
-        if raw_mode:
-            reply = format_owner_toolbox_raw_details(executed)
-        trace_item = {
-            "tool_name": "list_model_profiles",
-            "args": {"scope": "current", "include_disabled": include_disabled},
-            "ok": bool(executed.allowed),
-            "result": json.dumps({
-                "allowed": executed.allowed,
-                "reason": executed.reason,
-                "reply": executed.reply,
-                "output": executed.output,
-                "data": executed.data,
-            }, ensure_ascii=False, default=str),
-        }
-        return _result(
-            handled=True,
-            allowed=executed.allowed,
-            reason=executed.reason,
-            reply=reply,
-            tool_name="list_model_profiles",
-            output=executed.output,
-            data={"tier": tier, "tool_call_count": 1},
-            raw_trace=[trace_item],
-        )
 
     # ---- plan-only gate: classify intent before entering tool loop ----
     # Can be disabled by setting owner_toolbox_light_plan_only_gate_enabled=false

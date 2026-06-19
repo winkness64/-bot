@@ -14,7 +14,7 @@ def _record(msg_id: str, text: str, ts: float, *, is_bot: bool = False) -> dict:
     return {
         "msg_id": msg_id,
         "uid": "yangyang_bot" if is_bot else "335059272",
-        "nick": "秧秧" if is_bot else "阿漂",
+        "nick": "秧秧" if is_bot else "漂♂总",
         "group_id": "",
         "channel": "private",
         "text": text,

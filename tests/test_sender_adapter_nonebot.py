@@ -140,7 +140,7 @@ async def _test_nonebot_adapter_long_text_forward_fallback(mods: dict) -> None:
     event = MockEvent(user_id=335059272)
     adapter = Adapter(bot=bot, event=event)
 
-    long_text = ("阿漂在冒烟\n" * 400).strip()
+    long_text = ("漂♂总在冒烟\n" * 400).strip()
     result = await adapter.send_current_session(message, long_text)
 
     assert result.attempted is True

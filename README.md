@@ -168,8 +168,8 @@ QQ 当前测试会话命令：
   - 当前真实执行层仍未开放，跨会话发送仍禁止
 - 硬规则 DecisionEngine：
   - 私聊回复
-  - owner/阿漂群聊 @bot：最高优先级放行
-  - owner/阿漂明确命令白名单：最高优先级放行
+  - owner/漂♂总群聊 @bot：最高优先级放行
+  - owner/漂♂总明确命令白名单：最高优先级放行
   - 群聊明确 @ bot 回复
   - 群聊 quote/reply bot 时，仅引用不算回复资格，仍需同时 @bot
   - owner 明确指令不受普通 quote/reply 静默与普通 bot loop 误杀
@@ -662,8 +662,8 @@ DEEPSEEK_BASE_URL=https://your-deepseek-compatible-endpoint/v1
 - 不做长期记忆检索
 
 本轮补充 owner 指令硬规则：
-- owner/阿漂在群聊中 `@bot`：直接进入回复判定，优先级最高
-- owner/阿漂明确命令白名单：即使不 `@bot` 也允许进入回复判定
+- owner/漂♂总在群聊中 `@bot`：直接进入回复判定，优先级最高
+- owner/漂♂总明确命令白名单：即使不 `@bot` 也允许进入回复判定
 - 白名单采用硬规则关键词匹配，不交给 LLM
 - 普通群友即使使用相同动词，也不能借此解锁 bot 回复资格
 - owner 明确指令不受普通 quote/reply 静默与普通 bot loop 误杀
@@ -671,7 +671,7 @@ DEEPSEEK_BASE_URL=https://your-deepseek-compatible-endpoint/v1
 
 本轮补充 quote/reply 触发规则：
 - 群聊中，仅引用 bot 上一条消息不构成回复资格
-- 必须同时 `@bot`，或 owner/阿漂明确指令，才允许触发回复
+- 必须同时 `@bot`，或 owner/漂♂总明确指令，才允许触发回复
 - 普通群聊非 `@` + quote bot：应 `SKIP`，但消息仍入库
 - 私聊不受 quote/reply 规则影响
 

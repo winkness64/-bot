@@ -268,9 +268,9 @@ def _stream_chunk(*, content=None, tool_calls=None, usage=None):
 
 def test_private_streaming_buffer_flush_policy_is_more_eager() -> None:
     src = Path('src/plugins/yangyang/__init__.py').read_text(encoding='utf-8')
-    assert 'min_stream_chars = 16' in src
-    assert 'eager_stream_chars = 32' in src
-    assert 'max_stream_idle_seconds = 0.45' in src
+    assert 'min_stream_chars = 8' in src
+    assert 'eager_stream_chars = 20' in src
+    assert 'max_stream_idle_seconds = 0.2' in src
     assert 'len(pending) < min_stream_chars' in src
     assert 'len(stream_state["buffer"]) >= eager_stream_chars' in src
     assert 'now - float(stream_state["last_flush_ts"])' in src
@@ -360,3 +360,132 @@ async def test_openai_compat_provider_stream_timeout_raises() -> None:
             timeout=0.01,
             stream=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_router_fallback_reuses_same_messages_and_records_fallback_metadata() -> None:
+    cfg = DictConfig(
+        {
+            'dry_run': False,
+            'models': {
+                'v4_flash': {'model': 'deepseek-v4-flash', 'enabled': True},
+                'v4_pro': {'model': 'deepseek-v4-pro', 'enabled': True},
+            },
+            'providers': {
+                'v4_flash': {'provider': 'mock_bad_same_messages', 'model': 'deepseek-v4-flash', 'timeout': 30, 'cooldown_on_fail': 60, 'enabled': True},
+                'v4_pro': {'provider': 'mock_ok_same_messages', 'model': 'deepseek-v4-pro', 'timeout': 60, 'cooldown_on_fail': 120, 'enabled': True},
+            },
+            'model_profile_switcher': {'fallback_profiles_private': ['v4_pro']},
+        }
+    )
+    router = ModelRouter(cfg)
+
+    class BadProvider(MockProvider):
+        @property
+        def provider_name(self) -> str:
+            return 'mock_bad_same_messages'
+
+    class OkProvider(MockProvider):
+        @property
+        def provider_name(self) -> str:
+            return 'mock_ok_same_messages'
+
+    bad = BadProvider(error=TimeoutError('primary exploded timeout'))
+    ok = OkProvider(response_text='fallback preserved brain')
+    router.register_provider(bad)
+    router.register_provider(ok)
+
+    messages = [
+        {'role': 'system', 'content': '[SessionAnchor]\ncurrent_task: fallback 同脑继承补强\ntodo_items:\n- fallback 同脑继承补强\nrecent_decisions:\n- 漂♂总要求：继续'},
+        {'role': 'user', 'content': '继续'},
+    ]
+    expected_hash, expected_len = router._messages_fingerprint(messages)
+
+    response, actual_tier = await router.call(
+        'v4_flash',
+        messages,
+        session_id='private:335059272',
+        channel='private',
+    )
+
+    assert response == 'fallback preserved brain'
+    assert actual_tier == 'v4_pro'
+    assert router.last_call_hash == expected_hash
+    assert router.last_call_messages_len == expected_len
+    assert router.last_call_fallback_used is True
+    assert router.last_call_fallback_from == 'v4_flash'
+    assert router.last_call_fallback_to == 'v4_pro'
+    assert 'timeout' in router.last_call_fallback_reason.lower()
+    assert len(ok.calls) == 1
+    assert ok.calls[0]['messages'] is not messages
+    assert ok.calls[0]['messages'] == messages
+    assert ok.calls[0]['messages'][0]['content'].startswith('[SessionAnchor]')
+    assert 'fallback 同脑继承补强' in ok.calls[0]['messages'][0]['content']
+    assert ok.calls[0]['messages'][1]['content'] == '继续'
+
+
+@pytest.mark.asyncio
+async def test_router_sensitive_fallback_switches_to_safe_messages_instead_of_raw_prompt() -> None:
+    cfg = DictConfig(
+        {
+            'dry_run': False,
+            'models': {
+                'v4_flash': {'model': 'deepseek-v4-flash', 'enabled': True},
+                'v4_pro': {'model': 'deepseek-v4-pro', 'enabled': True},
+            },
+            'providers': {
+                'v4_flash': {'provider': 'mock_bad_sensitive', 'model': 'deepseek-v4-flash', 'timeout': 30, 'cooldown_on_fail': 60, 'enabled': True},
+                'v4_pro': {'provider': 'mock_ok_sensitive', 'model': 'deepseek-v4-pro', 'timeout': 60, 'cooldown_on_fail': 120, 'enabled': True},
+            },
+            'model_profile_switcher': {'fallback_profiles_private': ['v4_pro']},
+        }
+    )
+    router = ModelRouter(cfg)
+
+    class SensitiveError(RuntimeError):
+        pass
+
+    class BadProvider(MockProvider):
+        @property
+        def provider_name(self) -> str:
+            return 'mock_bad_sensitive'
+
+    class OkProvider(MockProvider):
+        @property
+        def provider_name(self) -> str:
+            return 'mock_ok_sensitive'
+
+    bad = BadProvider(error=SensitiveError('sensitive_words_detected: blocked'))
+    ok = OkProvider(response_text='safe fallback')
+    router.register_provider(bad)
+    router.register_provider(ok)
+
+    raw_messages = [
+        {'role': 'system', 'content': '[SessionAnchor]\ncurrent_task: 敏感回退分支验尸'},
+        {'role': 'user', 'content': '这里带原始敏感语料'},
+    ]
+    expected_hash, expected_len = router._messages_fingerprint(raw_messages)
+
+    response, actual_tier = await router.call(
+        'v4_flash',
+        raw_messages,
+        session_id='private:335059272',
+        channel='private',
+    )
+
+    assert response == 'safe fallback'
+    assert actual_tier == 'v4_pro'
+    assert router.last_call_hash == expected_hash
+    assert router.last_call_messages_len == expected_len
+    assert router.last_call_sensitive_failure is True
+    assert router.last_call_error_type == 'sensitive_words_detected'
+    assert router.last_call_fallback_used is True
+    assert len(ok.calls) == 1
+    assert ok.calls[0]['messages'] is not raw_messages
+    safe_blob = '\n'.join(str(item.get('content') or '') for item in ok.calls[0]['messages'])
+    raw_blob = '\n'.join(str(item.get('content') or '') for item in raw_messages)
+    assert '原始敏感语料' not in safe_blob
+    assert '[SessionAnchor]' not in safe_blob
+    assert '脱敏丢弃' in safe_blob
+    assert '安全改写 fallback' in safe_blob
+    assert safe_blob != raw_blob

@@ -17,6 +17,7 @@ def _prepare_package_roots() -> None:
     ensure_package("plugins.yangyang.core", PLUGIN_ROOT / "core")
     ensure_package("plugins.yangyang.memory", PLUGIN_ROOT / "memory")
     ensure_package("plugins.yangyang.output", PLUGIN_ROOT / "output")
+    ensure_package("plugins.yangyang.tasks", PLUGIN_ROOT / "tasks")
 
 
 def _load_core_admin_modules() -> dict:
@@ -63,6 +64,20 @@ def _load_output_modules() -> dict:
             PLUGIN_ROOT / "output" / "current_session_smoke_trigger.py",
         ),
         "sender": load_module("plugins.yangyang.output.sender", PLUGIN_ROOT / "output" / "sender.py"),
+        "factory_completion_current_session_bridge": load_module(
+            "plugins.yangyang.output.factory_completion_current_session_bridge",
+            PLUGIN_ROOT / "output" / "factory_completion_current_session_bridge.py",
+        ),
+    }
+
+
+def _load_tasks_modules() -> dict:
+    return {
+        "factory_completion_notifier": load_module(
+            "plugins.yangyang.tasks.factory_completion_notifier",
+            PLUGIN_ROOT / "tasks" / "factory_completion_notifier.py",
+        ),
+        "tasks": load_module("plugins.yangyang.tasks", PLUGIN_ROOT / "tasks" / "__init__.py"),
     }
 
 
@@ -116,7 +131,7 @@ def _resolve_legacy_exports(core: dict) -> dict:
     }
 
 
-def _build_exports(core: dict, memory: dict, output: dict, plugin_mod: object, legacy: dict) -> dict:
+def _build_exports(core: dict, memory: dict, output: dict, tasks: dict, plugin_mod: object, legacy: dict) -> dict:
     runtime_mod = core["runtime"]
     event_adapter_mod = core["event_adapter"]
     decision_mod = core["decision"]
@@ -139,6 +154,9 @@ def _build_exports(core: dict, memory: dict, output: dict, plugin_mod: object, l
     current_session_manual_smoke_mod = output["current_session_manual_smoke"]
     current_session_smoke_trigger_mod = output["current_session_smoke_trigger"]
     sender_mod = output["sender"]
+    factory_completion_bridge_mod = output["factory_completion_current_session_bridge"]
+    factory_completion_notifier_mod = tasks["factory_completion_notifier"]
+    tasks_mod = tasks["tasks"]
 
     return {
         "RuntimeConfig": runtime_mod.RuntimeConfig,
@@ -182,6 +200,11 @@ def _build_exports(core: dict, memory: dict, output: dict, plugin_mod: object, l
         "summarize_owner_action_delivery_guard": legacy["summarize_owner_action_delivery_guard"],
         "parse_owner_engineering_toolbox_command": legacy["parse_owner_engineering_toolbox_command"],
         "handle_owner_engineering_toolbox_message": owner_engineering_toolbox_mod.handle_owner_engineering_toolbox_message,
+        "FactoryCompletionBridgeResult": factory_completion_bridge_mod.FactoryCompletionBridgeResult,
+        "notify_owner_current_session_on_factory_completion": factory_completion_bridge_mod.notify_owner_current_session_on_factory_completion,
+        "run_factory_completion_notifier": factory_completion_notifier_mod.run_factory_completion_notifier,
+        "factory_completion_notifier_module": factory_completion_notifier_mod,
+        "tasks_module": tasks_mod,
         "plugin": plugin_mod,
         "owner_toolbox_light": owner_toolbox_light_mod,
     }
@@ -192,6 +215,7 @@ def prepare_modules():
     core = _load_core_admin_modules()
     memory = _load_memory_modules()
     output = _load_output_modules()
+    tasks = _load_tasks_modules()
     plugin_mod = _load_plugin_module()
     legacy = _resolve_legacy_exports(core)
-    return _build_exports(core, memory, output, plugin_mod, legacy)
+    return _build_exports(core, memory, output, tasks, plugin_mod, legacy)

@@ -13,7 +13,7 @@ def _record(msg_id: str, text: str, ts: float, *, is_bot: bool = False, channel:
     return {
         "msg_id": msg_id,
         "uid": "335059272" if not is_bot else "bot",
-        "nick": "阿漂" if not is_bot else "秧秧",
+        "nick": "漂♂总" if not is_bot else "秧秧",
         "group_id": "",
         "channel": channel,
         "text": text,
@@ -99,7 +99,7 @@ def test_resolver_excludes_handler_confirmation_reply() -> None:
     intent = detect_explicit_memory_intent("把刚才那个记一下")
     records = [
         _record("m1", "C4 subject guard 真机通过", 1.0),
-        _record("m2", "记好了，阿漂。", 2.0, is_bot=True),
+        _record("m2", "记好了，漂♂总。", 2.0, is_bot=True),
         _record("m3", "好，已经记录。", 3.0, is_bot=True),
     ]
     result = resolve_recent_context_for_explicit_write(intent, "把刚才那个记一下", records)
@@ -117,9 +117,9 @@ def test_resolver_noise_filter_keeps_latest_owner_substantive_message() -> None:
         _record("old1", "我晚上喜欢打什么游戏", 1.0),
         _record("bot1", "你晚上喜欢打《绝区零》呀，我记得的。", 2.0, is_bot=True),
         _record("ack", "确认", 3.0),
-        _record("bot2", "嗯，记得的——阿漂晚上喜欢打《绝区零》。", 4.0, is_bot=True),
+        _record("bot2", "嗯，记得的——漂♂总晚上喜欢打《绝区零》。", 4.0, is_bot=True),
         _record("new1", "今天 M2.2-A3 接入成功，下一步要做真机灰度", 5.0),
-        _record("bot3", "阿漂好厉害！M2.2-A3接入成功。", 6.0, is_bot=True),
+        _record("bot3", "漂♂总好厉害！M2.2-A3接入成功。", 6.0, is_bot=True),
     ]
     result = resolve_recent_context_for_explicit_write(intent, "把刚才我们的讨论内容记一下", records)
     assert result.status == "resolved"
@@ -128,7 +128,7 @@ def test_resolver_noise_filter_keeps_latest_owner_substantive_message() -> None:
     assert "我晚上喜欢打什么游戏" not in result.payload
     assert "绝区零" not in result.payload
     assert "确认" not in result.payload
-    assert "阿漂好厉害" not in result.payload
+    assert "漂♂总好厉害" not in result.payload
     assert result.used_msg_ids == ("new1",)
 
 

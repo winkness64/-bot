@@ -25,7 +25,7 @@ def _build_msg(**overrides):
     base = {
         "msg_id": "m1",
         "uid": "335059272",
-        "nick": "阿漂",
+        "nick": "漂♂总",
         "group_id": "",
         "channel": "private",
         "text": "测试消息",
@@ -57,7 +57,7 @@ def test_memory_observation_detects_c4_long_term_fact_section() -> None:
             "role": "system",
             "content": "[来自长期记忆的事实]\n- 当前用户/对话对象喜欢低延迟观测。",
         },
-        {"role": "user", "content": "阿漂: 测试"},
+        {"role": "user", "content": "漂♂总: 测试"},
     ]
 
     observation = plugin._collect_memory_observation(
@@ -109,7 +109,7 @@ def test_user_profile_read_write_roundtrip_and_backup_created() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         store = _build_store(tmpdir)
         profile = {
-            "nickname": "阿漂",
+            "nickname": "漂♂总",
             "traits": ["喜欢活人感", "讨厌模板化"],
             "relationship": "伴侣",
         }
@@ -119,7 +119,7 @@ def test_user_profile_read_write_roundtrip_and_backup_created() -> None:
 
         assert saved["user_id"] == "335059272"
         assert loaded is not None
-        assert loaded["nickname"] == "阿漂"
+        assert loaded["nickname"] == "漂♂总"
         assert loaded["traits"] == ["喜欢活人感", "讨厌模板化"]
         assert "last_updated" in loaded
 
@@ -145,10 +145,10 @@ def test_impression_update_persists_and_creates_backup() -> None:
 def test_memory_prompt_building_contains_short_term_profile_and_impression() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         store = _build_store(tmpdir)
-        store.add_to_short_term("session-b", {"uid": "335059272", "nick": "阿漂", "text": "今天做记忆系统"})
+        store.add_to_short_term("session-b", {"uid": "335059272", "nick": "漂♂总", "text": "今天做记忆系统"})
         store.save_user_profile(
             "335059272",
-            {"nickname": "阿漂", "preferences": ["低成本方案", "搞事情"], "relationship": "伴侣"},
+            {"nickname": "漂♂总", "preferences": ["低成本方案", "搞事情"], "relationship": "伴侣"},
         )
         store.update_impression("335059272", "mood", "productive")
         store.memory_system.update_relation("335059272", "2690087239", "信任队友")
@@ -168,9 +168,9 @@ def test_memory_prompt_building_contains_short_term_profile_and_impression() -> 
 def test_prompt_builder_memory_prompt_is_optional_and_not_enabled_by_default() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         store = _build_store(tmpdir)
-        store.save_user_profile("335059272", {"nickname": "阿漂", "traits": ["喜欢活人感"]})
+        store.save_user_profile("335059272", {"nickname": "漂♂总", "traits": ["喜欢活人感"]})
         store.update_impression("335059272", "style", "真实聊天")
-        store.add_to_short_term("335059272", {"uid": "335059272", "nick": "阿漂", "text": "测试可选记忆"})
+        store.add_to_short_term("335059272", {"uid": "335059272", "nick": "漂♂总", "text": "测试可选记忆"})
 
         default_builder = PromptBuilder(store=store, skill_loader=None)
         enabled_builder = PromptBuilder(store=store, skill_loader=None, memory_enabled=True)
@@ -458,7 +458,7 @@ def test_build_memory_prompt_budget_controls_for_many_items() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         store = _build_store(tmpdir)
         for index in range(1000):
-            store.add_to_short_term("session-budget", {"uid": "u1", "nick": "阿漂", "text": f"msg-{index}-" + ("x" * 40), "timestamp": index})
+            store.add_to_short_term("session-budget", {"uid": "u1", "nick": "漂♂总", "text": f"msg-{index}-" + ("x" * 40), "timestamp": index})
         prompt = store.build_memory_prompt("u1", "session-budget", short_term_limit=1000, char_budget=600)
         assert len(prompt) <= 600
         assert "msg-999" in prompt
@@ -470,7 +470,7 @@ def test_build_memory_prompt_budget_controls_for_hundred_items() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         store = _build_store(tmpdir)
         for index in range(100):
-            store.add_to_short_term("session-100", {"uid": "u1", "nick": "阿漂", "text": f"line-{index}", "timestamp": index})
+            store.add_to_short_term("session-100", {"uid": "u1", "nick": "漂♂总", "text": f"line-{index}", "timestamp": index})
         prompt = store.build_memory_prompt("u1", "session-100", short_term_limit=100, char_budget=500)
         assert len(prompt) <= 500
         assert "line-99" in prompt

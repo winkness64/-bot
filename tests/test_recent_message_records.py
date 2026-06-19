@@ -43,7 +43,7 @@ def _message(
     return Message(
         msg_id=msg_id,
         uid=uid,
-        nick=nick or ("秧秧" if uid == "yangyang_bot" else "阿漂"),
+        nick=nick or ("秧秧" if uid == "yangyang_bot" else "漂♂总"),
         group_id=group_id if channel == "group" else "",
         channel=channel,
         text=text,

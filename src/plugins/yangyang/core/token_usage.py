@@ -227,7 +227,7 @@ def _top_bucket_lines(title: str, bucket: dict[str, dict[str, Any]], *, limit: i
 
 def format_token_usage_summary(summary: TokenUsageSummary, *, title: str = "Token 用量", group_by: str | None = None) -> str:
     if not summary.available:
-        return "阿漂，我这边还没有可用的 token 统计记录。等后续模型调用写入 usage 后就能查。"
+        return "漂♂总，我这边还没有可用的 token 统计记录。等后续模型调用写入 usage 后就能查。"
     group = str(group_by or summary.group_by or "none").strip().lower()
     parts = [
         f"{title}：共 {summary.total_tokens} tokens。",

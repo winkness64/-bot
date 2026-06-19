@@ -80,7 +80,7 @@ def make_group_event(*, user_id: str, message_id: str, text: str, group_id: str 
         message_id=message_id,
         message=[Seg("text", text=text)],
         raw_message=text,
-        sender=FakeSenderInfo("阿漂" if user_id == OWNER_UID else "普通群友"),
+        sender=FakeSenderInfo("漂♂总" if user_id == OWNER_UID else "普通群友"),
         group_id=group_id,
     )
 
